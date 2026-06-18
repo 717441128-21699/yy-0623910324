@@ -1,0 +1,109 @@
+{
+  "id": "34777a63",
+  "name": "日常巡检",
+  "artist_name": "王一博",
+  "created_at": "2026-06-19T05:14:07.220105",
+  "notes": "6月19日凌晨巡检",
+  "analysis_result": {
+    "artist_name": "王一博",
+    "discussion_volume": 8869,
+    "volume_change": 125.94,
+    "sentiment": "neutral",
+    "sentiment_score": 0.19,
+    "top_trending_words": [
+      {
+        "word": "可爱",
+        "count": 4947,
+        "growth_rate": 172.84,
+        "is_anomaly": false
+      },
+      {
+        "word": "造型",
+        "count": 799,
+        "growth_rate": 169.93,
+        "is_anomaly": false
+      },
+      {
+        "word": "温暖",
+        "count": 2681,
+        "growth_rate": 169.47,
+        "is_anomaly": false
+      },
+      {
+        "word": "代言",
+        "count": 1788,
+        "growth_rate": 145.91,
+        "is_anomaly": false
+      },
+      {
+        "word": "封杀",
+        "count": 450,
+        "growth_rate": 111.19,
+        "is_anomaly": true
+      },
+      {
+        "word": "优秀",
+        "count": 831,
+        "growth_rate": 109.37,
+        "is_anomaly": false
+      },
+      {
+        "word": "吐槽",
+        "count": 4698,
+        "growth_rate": 86.44,
+        "is_anomaly": false
+      },
+      {
+        "word": "红毯",
+        "count": 3202,
+        "growth_rate": 74.83,
+        "is_anomaly": false
+      },
+      {
+        "word": "美丽",
+        "count": 3277,
+        "growth_rate": 16.4,
+        "is_anomaly": false
+      },
+      {
+        "word": "排名",
+        "count": 148,
+        "growth_rate": -15.73,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [
+      {
+        "keyword": "王一博疑似丑闻",
+        "mentions": 650,
+        "sentiment": "negative",
+        "description": "近期有爆料称王一博相关，引发网友广泛讨论",
+        "spread_potential": 0.39
+      },
+      {
+        "keyword": "王一博被曝绯闻",
+        "mentions": 552,
+        "sentiment": "negative",
+        "description": "多个账号发布关于王一博的绯闻消息，传播速度较快",
+        "spread_potential": 0.88
+      },
+      {
+        "keyword": "王一博被曝塌房",
+        "mentions": 1139,
+        "sentiment": "negative",
+        "description": "多个账号发布关于王一博的塌房消息，传播速度较快",
+        "spread_potential": 0.77
+      }
+    ],
+    "anomaly_words": [
+      "封杀"
+    ],
+    "risk_level": "critical",
+    "risk_score": 95.8,
+    "platform": "all",
+    "start_time": "2026-06-18T05:14:07.185929",
+    "end_time": "2026-06-19T05:14:07.185929",
+    "analyzed_at": "2026-06-19T05:14:07.186221",
+    "focus_keywords": []
+  }
+}

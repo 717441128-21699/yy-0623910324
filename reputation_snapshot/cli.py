@@ -142,6 +142,11 @@ def analyze(
     default=None,
     help="仅显示指定风险等级及以上的结果",
 )
+@click.option(
+    "--night-report",
+    is_flag=True,
+    help="夜间值班报告模式，输出总览结论和优先级建议",
+)
 @pass_ctx
 def batch(
     ctx: Context,
@@ -151,6 +156,7 @@ def batch(
     end_time: str,
     keyword: List[str],
     min_risk: str,
+    night_report: bool,
 ):
     """批量扫描多位艺人并按风险等级排序"""
     try:
@@ -179,7 +185,7 @@ def batch(
             ]
 
         summary = ctx.batch_scanner.get_risk_summary(results)
-        ctx.formatter.print_batch_results(results, summary)
+        ctx.formatter.print_batch_results(results, summary, night_report=night_report)
 
     except FileNotFoundError as e:
         ctx.formatter.print_error(str(e))
@@ -196,12 +202,74 @@ def batch(
     default=None,
     help="仅显示指定艺人的快照",
 )
+@click.option(
+    "-r", "--risk",
+    type=click.Choice(["low", "medium", "high", "critical"]),
+    default=None,
+    help="仅显示指定风险等级的快照",
+)
+@click.option(
+    "--start-time",
+    type=str,
+    default=None,
+    help="仅显示此时间之后创建的快照，格式：YYYY-MM-DD HH:MM",
+)
+@click.option(
+    "--end-time",
+    type=str,
+    default=None,
+    help="仅显示此时间之前创建的快照，格式：YYYY-MM-DD HH:MM",
+)
+@click.option(
+    "--export-md",
+    type=str,
+    default=None,
+    help="导出为Markdown报告，指定输出文件路径",
+)
+@click.option(
+    "--export-json",
+    type=str,
+    default=None,
+    help="导出为JSON报告，指定输出文件路径",
+)
+@click.option(
+    "--title",
+    type=str,
+    default="舆情快照报告",
+    help="导出报告的标题",
+)
 @pass_ctx
-def list_snapshots(ctx: Context, artist: str):
-    """列出所有本地快照"""
+def list_snapshots(
+    ctx: Context,
+    artist: str,
+    risk: str,
+    start_time: str,
+    end_time: str,
+    export_md: str,
+    export_json: str,
+    title: str,
+):
+    """列出所有本地快照，支持筛选和导出"""
     try:
-        snapshots = ctx.storage.list(artist_name=artist)
+        start_dt = _parse_datetime(start_time) if start_time else None
+        end_dt = _parse_datetime(end_time) if end_time else None
+
+        snapshots = ctx.storage.list(
+            artist_name=artist,
+            risk_level=risk,
+            start_time=start_dt,
+            end_time=end_dt,
+        )
         ctx.formatter.print_snapshot_list(snapshots)
+
+        if export_md:
+            path = ctx.storage.export_markdown(snapshots, export_md, title)
+            ctx.formatter.print_success(f"Markdown报告已导出: {path}")
+
+        if export_json:
+            path = ctx.storage.export_json(snapshots, export_json)
+            ctx.formatter.print_success(f"JSON报告已导出: {path}")
+
     except Exception as e:
         ctx.formatter.print_error(f"获取快照列表失败: {str(e)}")
         raise click.Abort()

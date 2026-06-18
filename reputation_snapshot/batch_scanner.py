@@ -71,12 +71,24 @@ class BatchScanner:
             RiskLevel.LOW.value: 0,
             "has_critical": False,
             "critical_artists": [],
+            "has_emergency": False,
+            "emergency_artists": [],
+            "has_spike": False,
+            "spike_artists": [],
         }
         for r in results:
             summary[r.risk_level.value] += 1
             if r.risk_level == RiskLevel.CRITICAL:
                 summary["has_critical"] = True
                 summary["critical_artists"].append(r.artist.name)
+
+            anomalies = self.anomaly_detector.detect_from_result(r.analysis_result)
+            if self.anomaly_detector.has_emergency_anomaly(anomalies):
+                summary["has_emergency"] = True
+                summary["emergency_artists"].append(r.artist.name)
+            if self.anomaly_detector.has_spike_anomaly(anomalies):
+                summary["has_spike"] = True
+                summary["spike_artists"].append(r.artist.name)
         return summary
 
     def load_artists_from_file(self, file_path: str) -> List[Artist]:

@@ -1,11 +1,12 @@
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from pathlib import Path
 
 from .models import Snapshot, AnalysisResult, Sentiment, RiskLevel, TrendingWord, ControversyPoint
+from .anomaly_detector import AnomalyDetector
 
 
 class SnapshotStorage:
@@ -14,6 +15,7 @@ class SnapshotStorage:
             storage_dir = os.path.join(os.getcwd(), "snapshots")
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.anomaly_detector = AnomalyDetector()
 
     def save(
         self,
@@ -49,7 +51,13 @@ class SnapshotStorage:
 
         return self._dict_to_snapshot(data)
 
-    def list(self, artist_name: str = None) -> List[Dict]:
+    def list(
+        self,
+        artist_name: str = None,
+        risk_level: str = None,
+        start_time: datetime = None,
+        end_time: datetime = None,
+    ) -> List[Dict]:
         snapshots = []
         for file_path in self.storage_dir.glob("*.json"):
             try:
@@ -59,21 +67,128 @@ class SnapshotStorage:
                 if artist_name and data["artist_name"] != artist_name:
                     continue
 
+                if risk_level and data["analysis_result"]["risk_level"] != risk_level:
+                    continue
+
+                created_at = datetime.fromisoformat(data["created_at"])
+                if start_time and created_at < start_time:
+                    continue
+                if end_time and created_at > end_time:
+                    continue
+
+                result_data = data["analysis_result"]
+                anomalies = self.anomaly_detector.detect([
+                    TrendingWord(**w) for w in result_data["top_trending_words"]
+                ])
+                has_emergency = any(a.get("is_emergency") for a in anomalies)
+                has_spike = any(a.get("is_spike") for a in anomalies)
+                anomaly_words = [a["word"] for a in anomalies]
+
                 snapshots.append({
                     "id": data["id"],
                     "name": data["name"],
                     "artist_name": data["artist_name"],
                     "created_at": data["created_at"],
-                    "risk_level": data["analysis_result"]["risk_level"],
-                    "risk_score": data["analysis_result"]["risk_score"],
-                    "sentiment": data["analysis_result"]["sentiment"],
-                    "discussion_volume": data["analysis_result"]["discussion_volume"],
+                    "risk_level": result_data["risk_level"],
+                    "risk_score": result_data["risk_score"],
+                    "sentiment": result_data["sentiment"],
+                    "discussion_volume": result_data["discussion_volume"],
+                    "anomaly_words": anomaly_words,
+                    "has_emergency": has_emergency,
+                    "has_spike": has_spike,
                     "notes": data.get("notes", ""),
                 })
             except (json.JSONDecodeError, KeyError):
                 continue
 
         return sorted(snapshots, key=lambda x: x["created_at"], reverse=True)
+
+    def export_markdown(
+        self,
+        snapshots: List[Dict],
+        output_path: str,
+        title: str = "舆情快照报告",
+    ) -> str:
+        lines = []
+        lines.append(f"# {title}")
+        lines.append("")
+        lines.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"快照数量: {len(snapshots)}")
+        lines.append("")
+
+        risk_counts = {}
+        for s in snapshots:
+            level = s["risk_level"]
+            risk_counts[level] = risk_counts.get(level, 0) + 1
+
+        lines.append("## 风险分布")
+        lines.append("")
+        lines.append("| 风险等级 | 数量 |")
+        lines.append("|---------|------|")
+        for level in ["critical", "high", "medium", "low"]:
+            label = {"critical": "极高风险", "high": "高风险", "medium": "中风险", "low": "低风险"}[level]
+            count = risk_counts.get(level, 0)
+            lines.append(f"| {label} | {count} |")
+        lines.append("")
+
+        lines.append("## 快照详情")
+        lines.append("")
+        lines.append("| ID | 名称 | 艺人 | 创建时间 | 风险等级 | 风险分 | 讨论量 | 情绪 | 异常词 | 备注 |")
+        lines.append("|----|------|------|----------|----------|--------|--------|------|--------|------|")
+
+        for s in snapshots:
+            risk_label = {"critical": "极高风险", "high": "高风险", "medium": "中风险", "low": "低风险"}[s["risk_level"]]
+            sentiment_label = {"positive": "正面", "neutral": "中性", "negative": "负面"}[s["sentiment"]]
+            anomaly_str = ",".join(s.get("anomaly_words", [])) if s.get("anomaly_words") else "-"
+            if s.get("has_emergency"):
+                anomaly_str = f"🚨 {anomaly_str}"
+            elif s.get("has_spike"):
+                anomaly_str = f"⚠️ {anomaly_str}"
+
+            lines.append(
+                f"| {s['id']} | {s['name']} | {s['artist_name']} | {s['created_at']} | {risk_label} | {s['risk_score']:.1f} | "
+                f"{s['discussion_volume']:,} | {sentiment_label} | {anomaly_str} | {s.get('notes', '')} |"
+            )
+
+        lines.append("")
+        lines.append("## 重点关注")
+        lines.append("")
+        high_risk = [s for s in snapshots if s["risk_level"] in ["critical", "high"]]
+        if high_risk:
+            lines.append("### 高风险艺人")
+            lines.append("")
+            for s in high_risk:
+                anomaly_str = ",".join(s.get("anomaly_words", [])) if s.get("anomaly_words") else "无"
+                lines.append(f"- **{s['artist_name']}** ({s['name']}): {s['risk_level']}({s['risk_score']:.1f}分)，异常词: {anomaly_str}")
+        else:
+            lines.append("无高风险艺人，整体态势平稳。")
+
+        content = "\n".join(lines)
+
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return str(output_path)
+
+    def export_json(
+        self,
+        snapshots: List[Dict],
+        output_path: str,
+    ) -> str:
+        export_data = {
+            "generated_at": datetime.now().isoformat(),
+            "count": len(snapshots),
+            "snapshots": snapshots,
+        }
+
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=2, default=str)
+
+        return str(output_path)
 
     def delete(self, snapshot_id: str) -> bool:
         file_path = self._get_snapshot_path(snapshot_id)

@@ -1,0 +1,85 @@
+{
+  "id": "f3c44f79",
+  "name": "新剧开播首日",
+  "artist_name": "肖战",
+  "created_at": "2026-06-19T05:13:38.241697",
+  "notes": "2026夏季档新剧开播",
+  "analysis_result": {
+    "artist_name": "肖战",
+    "discussion_volume": 46245,
+    "volume_change": 146.06,
+    "sentiment": "positive",
+    "sentiment_score": 0.61,
+    "top_trending_words": [
+      {
+        "word": "数据",
+        "count": 4835,
+        "growth_rate": 199.65,
+        "is_anomaly": false
+      },
+      {
+        "word": "神仙",
+        "count": 2634,
+        "growth_rate": 180.87,
+        "is_anomaly": false
+      },
+      {
+        "word": "美丽",
+        "count": 2666,
+        "growth_rate": 179.74,
+        "is_anomaly": false
+      },
+      {
+        "word": "综艺",
+        "count": 343,
+        "growth_rate": 96.31,
+        "is_anomaly": false
+      },
+      {
+        "word": "太棒了",
+        "count": 862,
+        "growth_rate": 82.82,
+        "is_anomaly": false
+      },
+      {
+        "word": "丑闻",
+        "count": 1937,
+        "growth_rate": 77.57,
+        "is_anomaly": false
+      },
+      {
+        "word": "热度",
+        "count": 532,
+        "growth_rate": 65.81,
+        "is_anomaly": false
+      },
+      {
+        "word": "精彩",
+        "count": 4978,
+        "growth_rate": 13.61,
+        "is_anomaly": false
+      },
+      {
+        "word": "代言解约",
+        "count": 3567,
+        "growth_rate": -9.35,
+        "is_anomaly": false
+      },
+      {
+        "word": "造型",
+        "count": 2445,
+        "growth_rate": -19.23,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [],
+    "anomaly_words": [],
+    "risk_level": "low",
+    "risk_score": 15.0,
+    "platform": "all",
+    "start_time": "2026-06-18T05:13:38.211743",
+    "end_time": "2026-06-19T05:13:38.211743",
+    "analyzed_at": "2026-06-19T05:13:38.211906",
+    "focus_keywords": []
+  }
+}

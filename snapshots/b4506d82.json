@@ -1,0 +1,87 @@
+{
+  "id": "b4506d82",
+  "name": "直播后2小时",
+  "artist_name": "易烊千玺",
+  "created_at": "2026-06-19T05:14:07.449311",
+  "notes": "生日直播监控",
+  "analysis_result": {
+    "artist_name": "易烊千玺",
+    "discussion_volume": 19987,
+    "volume_change": 37.39,
+    "sentiment": "positive",
+    "sentiment_score": 0.89,
+    "top_trending_words": [
+      {
+        "word": "翻车",
+        "count": 947,
+        "growth_rate": 189.79,
+        "is_anomaly": true
+      },
+      {
+        "word": "帅气",
+        "count": 1895,
+        "growth_rate": 172.27,
+        "is_anomaly": false
+      },
+      {
+        "word": "代言",
+        "count": 1079,
+        "growth_rate": 164.28,
+        "is_anomaly": false
+      },
+      {
+        "word": "出圈",
+        "count": 2469,
+        "growth_rate": 143.34,
+        "is_anomaly": false
+      },
+      {
+        "word": "太棒了",
+        "count": 3637,
+        "growth_rate": 135.99,
+        "is_anomaly": false
+      },
+      {
+        "word": "投票",
+        "count": 2283,
+        "growth_rate": 112.35,
+        "is_anomaly": false
+      },
+      {
+        "word": "热搜",
+        "count": 3475,
+        "growth_rate": 65.41,
+        "is_anomaly": false
+      },
+      {
+        "word": "黑料",
+        "count": 3494,
+        "growth_rate": 40.44,
+        "is_anomaly": false
+      },
+      {
+        "word": "穿搭",
+        "count": 847,
+        "growth_rate": 31.07,
+        "is_anomaly": false
+      },
+      {
+        "word": "期待",
+        "count": 2643,
+        "growth_rate": -9.29,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [],
+    "anomaly_words": [
+      "翻车"
+    ],
+    "risk_level": "medium",
+    "risk_score": 25.0,
+    "platform": "all",
+    "start_time": "2026-06-18T05:14:07.418325",
+    "end_time": "2026-06-19T05:14:07.418325",
+    "analyzed_at": "2026-06-19T05:14:07.418490",
+    "focus_keywords": []
+  }
+}
