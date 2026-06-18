@@ -164,6 +164,23 @@ def analyze(
     default="批量巡检",
     help="批量保存快照的名称前缀",
 )
+@click.option(
+    "--handover",
+    is_flag=True,
+    help="生成交接包：导出结果+对比+建议到markdown和json",
+)
+@click.option(
+    "--handover-dir",
+    type=str,
+    default="./reports",
+    help="交接包输出目录，默认 ./reports",
+)
+@click.option(
+    "--handover-title",
+    type=str,
+    default=None,
+    help="交接包标题，默认自动生成",
+)
 @pass_ctx
 def batch(
     ctx: Context,
@@ -177,6 +194,9 @@ def batch(
     compare_last: bool,
     save_all: bool,
     name_prefix: str,
+    handover: bool,
+    handover_dir: str,
+    handover_title: str,
 ):
     """批量扫描多位艺人并按风险等级排序"""
     try:
@@ -261,7 +281,7 @@ def batch(
             saved = ctx.storage.save_batch_snapshots(result_dicts, name_prefix=name_prefix)
             ctx.formatter.print_success(f"✓ 已批量保存 {len(saved)} 个快照，前缀：{name_prefix}")
 
-        elif compare_last and not save_all:
+        elif compare_last and not save_all and not handover:
             if click.confirm("\n是否保存本次批量巡检结果？", default=False):
                 result_dicts = []
                 for r in results:
@@ -295,6 +315,121 @@ def batch(
                     })
                 saved = ctx.storage.save_batch_snapshots(result_dicts, name_prefix=name_prefix)
                 ctx.formatter.print_success(f"✓ 已批量保存 {len(saved)} 个快照，前缀：{name_prefix}")
+
+        if handover:
+            from datetime import datetime as _dt
+            _ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+
+            if not compare_last:
+                artist_names = [a.name for a in artists]
+                current_result_dicts = []
+                for r in results:
+                    ar = r.analysis_result
+                    current_result_dicts.append({
+                        "artist_name": ar.artist_name,
+                        "risk_level": ar.risk_level.value,
+                        "risk_score": ar.risk_score,
+                        "discussion_volume": ar.discussion_volume,
+                        "sentiment": ar.sentiment.value,
+                        "top_trending_words": [
+                            {"word": w.word, "count": w.count, "growth_rate": w.growth_rate, "is_anomaly": w.is_anomaly}
+                            for w in ar.top_trending_words
+                        ],
+                    })
+                comparison = ctx.storage.get_batch_comparison(artist_names, current_results=current_result_dicts)
+
+            batch_followups = {}
+            for r in results:
+                ar = r.analysis_result
+                artist_name = ar.artist_name
+                anomalies = ctx.storage.anomaly_detector.detect_from_result(ar)
+                has_emergency = any(a.get("is_emergency") for a in anomalies)
+                risk_level = ar.risk_level
+                anomaly_words = [a["word"] for a in anomalies]
+                if has_emergency:
+                    batch_followups[artist_name] = "存在紧急预警词，需立即启动应急预案并持续监控"
+                elif risk_level == RiskLevel.CRITICAL:
+                    batch_followups[artist_name] = "极高风险，安排专人持续监控"
+                elif risk_level == RiskLevel.HIGH:
+                    batch_followups[artist_name] = "高风险，每2小时复查一次"
+                elif anomaly_words:
+                    batch_followups[artist_name] = "存在异常词，下次巡检时重点关注"
+
+            batch_details = []
+            for r in results:
+                ar = r.analysis_result
+                anomalies = ctx.storage.anomaly_detector.detect_from_result(ar)
+                anomaly_words = [a["word"] for a in anomalies]
+                has_emergency = any(a.get("is_emergency") for a in anomalies)
+                has_spike = any(a.get("is_spike") for a in anomalies)
+                batch_details.append({
+                    "id": f"BATCH-{r.analysis_result.artist_name}",
+                    "name": name_prefix,
+                    "artist_name": ar.artist_name,
+                    "created_at": ar.analyzed_at.isoformat() if hasattr(ar.analyzed_at, "isoformat") else str(ar.analyzed_at),
+                    "risk_level": ar.risk_level.value,
+                    "risk_score": ar.risk_score,
+                    "sentiment": ar.sentiment.value,
+                    "sentiment_score": ar.sentiment_score,
+                    "discussion_volume": ar.discussion_volume,
+                    "anomaly_words": anomaly_words,
+                    "has_emergency": has_emergency,
+                    "has_spike": has_spike,
+                    "notes": "批量巡检结果",
+                })
+
+            filter_conditions = {
+                "source": "batch_scan",
+                "platform": platform,
+                "focus_keywords": list(keyword),
+                "min_risk": min_risk,
+                "night_report": night_report,
+                "artist_file": file,
+                "total_artists_scanned": len(artists),
+            }
+
+            if handover_title:
+                title = handover_title
+            else:
+                shift_label = "夜班" if night_report else "巡检"
+                title = f"{_dt.now().strftime('%Y-%m-%d')} {name_prefix} {shift_label}交接"
+
+            open_items = ctx.followup_storage.get_open_items()
+
+            md_output = f"{handover_dir}/handover_{name_prefix}_{_ts}.md"
+            md_path = ctx.storage.export_markdown(
+                batch_details,
+                md_output,
+                title=title,
+                filter_conditions=filter_conditions,
+                trend_summary={
+                    "risk_escalated": comparison.get("risk_escalated", []) if comparison else [],
+                    "risk_decreased": comparison.get("risk_decreased", []) if comparison else [],
+                    "new_anomalies": comparison.get("new_anomalies", {}) if comparison else {},
+                    "resolved_anomalies": comparison.get("resolved_anomalies", {}) if comparison else {},
+                },
+                follow_up_suggestions=batch_followups,
+                open_followups=open_items,
+                batch_comparison=comparison,
+            )
+            ctx.formatter.print_success(f"✓ 交接包Markdown: {md_path}")
+
+            json_output = f"{handover_dir}/handover_{name_prefix}_{_ts}.json"
+            json_path = ctx.storage.export_json(
+                batch_details,
+                json_output,
+                filter_conditions=filter_conditions,
+                trend_summary={
+                    "risk_escalated": comparison.get("risk_escalated", []) if comparison else [],
+                    "risk_decreased": comparison.get("risk_decreased", []) if comparison else [],
+                    "new_anomalies": comparison.get("new_anomalies", {}) if comparison else {},
+                    "resolved_anomalies": comparison.get("resolved_anomalies", {}) if comparison else {},
+                },
+                follow_up_suggestions=batch_followups,
+                open_followups=open_items,
+                batch_comparison=comparison,
+            )
+            ctx.formatter.print_success(f"✓ 交接包JSON: {json_path}")
 
     except FileNotFoundError as e:
         ctx.formatter.print_error(str(e))
@@ -675,36 +810,53 @@ def archive(ctx: Context, before: str, archive_dir: str, yes: bool, dry_run: boo
     try:
         before_dt = _parse_datetime(before)
 
-        result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=True)
+        preview = ctx.storage.archive_before(before_dt, archive_dir, dry_run=True)
+        ctx.formatter.print_archive_preview(preview)
 
-        if dry_run:
-            ctx.formatter.print_archive_preview(result)
-            if result["archived"] > 0 and click.confirm(
-                f"\n预览完成，是否确认归档以上 {result['archived']} 个快照？",
-                default=False,
-            ):
-                result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=False)
-                ctx.formatter.print_success(
-                    f"归档完成: 归档 {result['archived']} 个快照，剩余 {result['remaining']} 个"
-                )
+        if preview["archived"] == 0:
+            ctx.formatter.print_warning("无可归档的快照，操作结束")
             return
 
-        if not yes:
-            ctx.formatter.print_archive_preview(result)
-            click.confirm(
-                f"\n确定要归档以上 {result['archived']} 个快照吗？数据将移动到归档目录而非删除。",
-                abort=True,
+        if dry_run:
+            ctx.formatter.print_warning("仅预览模式，未执行实际归档")
+            return
+
+        confirm = False
+        if yes:
+            confirm = True
+        else:
+            confirm = click.confirm(
+                f"\n确认归档以上 {preview['archived']} 个快照？数据将移动到归档目录（非删除）。",
+                default=False,
             )
-            result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=False)
+
+        if not confirm:
+            ctx.formatter.print_warning("用户取消，归档未执行")
+            return
+
+        result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=False)
+
+        if result["archived"] != preview["archived"]:
+            ctx.formatter.print_warning(
+                f"注意：预览时显示 {preview['archived']} 个，实际归档 {result['archived']} 个"
+            )
 
         ctx.formatter.print_success(
-            f"归档完成: 归档 {result['archived']} 个快照，剩余 {result['remaining']} 个"
+            f"归档完成: 成功移动 {result['archived']} 个快照到 {result['archive_dir']}，当前主目录剩余 {result['remaining']} 个"
         )
         if result["archived_ids"]:
             ctx.formatter.print_warning(
                 f"已归档快照ID: {', '.join(result['archived_ids'][:10])}"
                 + ("..." if len(result["archived_ids"]) > 10 else "")
             )
+
+        after_snapshots = ctx.storage.list()
+        before_ids = set(preview["archived_ids"])
+        verify_moved = all(s["id"] not in before_ids for s in after_snapshots)
+        if verify_moved:
+            ctx.formatter.print_success("✓ 校验通过：已归档快照已从主列表中移除")
+        else:
+            ctx.formatter.print_error("✗ 校验异常：部分已归档快照仍在主列表中，请检查")
     except click.Abort:
         raise
     except Exception as e:
@@ -899,6 +1051,49 @@ def followup_delete(ctx: Context, item_id: str, yes: bool):
         raise
     except Exception as e:
         ctx.formatter.print_error(f"删除跟进事项失败: {str(e)}")
+        raise click.Abort()
+
+
+@followup.command(name="auto-add")
+@click.option("-f", "--file", type=str, default=None, help="艺人名单文件路径")
+@click.option("-a", "--artist", type=str, multiple=True, help="指定艺人，可多次指定")
+@click.option("--yes", is_flag=True, help="跳过预览直接创建")
+@pass_ctx
+def followup_auto_add(ctx: Context, file: str, artist: List[str], yes: bool):
+    """从历史快照批量自动生成跟进待办（高风险/紧急词/反复异常词自动建单，智能去重）"""
+    try:
+        artist_names = []
+        if file:
+            artists = ctx.batch_scanner.load_artists_from_file(file)
+            artist_names = [a.name for a in artists]
+        if artist:
+            artist_names.extend(list(artist))
+
+        if not artist_names:
+            ctx.formatter.print_error("请通过 --file 或 --artist 指定至少一个艺人")
+            raise click.Abort()
+
+        result = ctx.followup_storage.auto_create_from_history(
+            artist_names=artist_names,
+            snapshot_storage=ctx.storage,
+        )
+
+        if not yes:
+            ctx.formatter.print_auto_add_preview(result)
+            if result["created"] and click.confirm(
+                f"\n预览完成，是否确认创建以上 {len(result['created'])} 个跟进事项？",
+                default=False,
+            ):
+                pass
+            else:
+                return
+        else:
+            ctx.formatter.print_auto_add_preview(result)
+
+    except click.Abort:
+        raise
+    except Exception as e:
+        ctx.formatter.print_error(f"批量生成跟进事项失败: {str(e)}")
         raise click.Abort()
 
 

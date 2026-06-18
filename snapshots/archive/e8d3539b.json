@@ -1,0 +1,89 @@
+{
+  "id": "e8d3539b",
+  "name": "测试归档验证",
+  "artist_name": "肖战",
+  "created_at": "2026-06-19T05:55:48.740237",
+  "notes": "",
+  "analysis_result": {
+    "artist_name": "肖战",
+    "discussion_volume": 27188,
+    "volume_change": 10.55,
+    "sentiment": "positive",
+    "sentiment_score": 0.6,
+    "top_trending_words": [
+      {
+        "word": "努力",
+        "count": 4601,
+        "growth_rate": 188.74,
+        "is_anomaly": false
+      },
+      {
+        "word": "喜欢",
+        "count": 4780,
+        "growth_rate": 187.55,
+        "is_anomaly": false
+      },
+      {
+        "word": "专辑",
+        "count": 1652,
+        "growth_rate": 165.78,
+        "is_anomaly": false
+      },
+      {
+        "word": "出圈",
+        "count": 3074,
+        "growth_rate": 163.77,
+        "is_anomaly": false
+      },
+      {
+        "word": "新片",
+        "count": 4341,
+        "growth_rate": 121.14,
+        "is_anomaly": false
+      },
+      {
+        "word": "代言",
+        "count": 1185,
+        "growth_rate": 109.65,
+        "is_anomaly": false
+      },
+      {
+        "word": "质疑",
+        "count": 1324,
+        "growth_rate": 88.07,
+        "is_anomaly": false
+      },
+      {
+        "word": "抵制",
+        "count": 2388,
+        "growth_rate": 85.17,
+        "is_anomaly": true
+      },
+      {
+        "word": "投票",
+        "count": 3164,
+        "growth_rate": 84.05,
+        "is_anomaly": false
+      },
+      {
+        "word": "绝了",
+        "count": 646,
+        "growth_rate": 64.46,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [],
+    "anomaly_words": [
+      "抵制"
+    ],
+    "risk_level": "medium",
+    "risk_score": 25.0,
+    "platform": "all",
+    "start_time": "2026-06-18T05:55:48.710342",
+    "end_time": "2026-06-19T05:55:48.710342",
+    "analyzed_at": "2026-06-19T05:55:48.710483",
+    "focus_keywords": [
+      "新片"
+    ]
+  }
+}

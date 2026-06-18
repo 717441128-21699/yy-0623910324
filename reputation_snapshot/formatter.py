@@ -1472,3 +1472,63 @@ class OutputFormatter:
         info_text = Text("\n").join([Text(line, style="dim") for line in info_lines])
         self.console.print(Panel(info_text, border_style="dim"))
 
+    def print_auto_add_preview(self, result: Dict):
+        created = result["created"]
+        skipped = result["skipped"]
+        total = len(created) + len(skipped)
+
+        if total == 0:
+            self.console.print(Panel(
+                "[dim]无可生成的跟进事项（指定艺人无历史快照或全部已存在同类未闭环事项）[/dim]",
+                title="📋 自动生成跟进事项预览",
+                title_align="left",
+                border_style="dim"
+            ))
+            return
+
+        if created:
+            table = Table(
+                Column("ID", width=10),
+                Column("艺人", width=12),
+                Column("分类", width=14, justify="center"),
+                Column("生成原因", width=50),
+                box=box.SIMPLE,
+                expand=True,
+            )
+            category_labels = {
+                "emergency": ("🚨 紧急预警", "blink bold bright_red"),
+                "critical": ("🔴 极高风险", "bright_red"),
+                "high": ("🟠 高风险", "bright_magenta"),
+                "recurrent": ("🔁 反复异常", "bright_yellow"),
+                "anomaly": ("⚠️ 异常词", "yellow"),
+            }
+            for item in created:
+                label, color = category_labels.get(item["category"], (item["category"], "dim"))
+                table.add_row(
+                    item["id"],
+                    item["artist"],
+                    Text(label, style=color),
+                    item["reason"],
+                )
+            self.console.print(
+                Panel(table, title=f"✅ 拟创建（{len(created)} 项）", title_align="left", border_style="bright_green")
+            )
+
+        if skipped:
+            skip_table = Table(
+                Column("艺人", width=12),
+                Column("分类", width=14, justify="center"),
+                Column("跳过原因", width=40),
+                box=box.SIMPLE,
+                expand=True,
+            )
+            for item in skipped:
+                skip_table.add_row(
+                    item["artist"],
+                    item["category"],
+                    item["reason"],
+                )
+            self.console.print(
+                Panel(skip_table, title=f"⏭️  已跳过（{len(skipped)} 项，去重）", title_align="left", border_style="dim")
+            )
+

@@ -28,5 +28,73 @@
     "notes": "舆情已回落，无扩散风险",
     "snapshot_ids": [],
     "anomaly_words": []
+  },
+  {
+    "id": "8d5bf109",
+    "artist_name": "王一博",
+    "title": "王一博 紧急预警跟进",
+    "description": "艺人 王一博 最近快照出现紧急预警词: 封杀，需立即启动应急预案持续监控",
+    "priority": "critical",
+    "status": "pending",
+    "assignee": "",
+    "next_review_time": "2026-06-19T07:53:01.263339",
+    "created_at": "2026-06-19T05:53:01.268254",
+    "updated_at": "2026-06-19T05:53:01.268254",
+    "notes": "",
+    "snapshot_ids": [],
+    "anomaly_words": [
+      "封杀"
+    ]
+  },
+  {
+    "id": "e6547ae6",
+    "artist_name": "肖战",
+    "title": "肖战 紧急预警跟进",
+    "description": "艺人 肖战 最近快照出现紧急预警词: 代言解约，需立即启动应急预案持续监控",
+    "priority": "critical",
+    "status": "pending",
+    "assignee": "",
+    "next_review_time": "2026-06-19T07:53:01.270096",
+    "created_at": "2026-06-19T05:53:01.270112",
+    "updated_at": "2026-06-19T05:53:01.270112",
+    "notes": "",
+    "snapshot_ids": [],
+    "anomaly_words": [
+      "代言解约"
+    ]
+  },
+  {
+    "id": "73f515c8",
+    "artist_name": "易烊千玺",
+    "title": "易烊千玺 异常词关注",
+    "description": "艺人 易烊千玺 最近快照出现异常词: 翻车，下次巡检重点关注",
+    "priority": "medium",
+    "status": "pending",
+    "assignee": "",
+    "next_review_time": "2026-06-19T13:53:01.271663",
+    "created_at": "2026-06-19T05:53:01.271674",
+    "updated_at": "2026-06-19T05:53:01.271674",
+    "notes": "",
+    "snapshot_ids": [],
+    "anomaly_words": [
+      "翻车"
+    ]
+  },
+  {
+    "id": "58006843",
+    "artist_name": "易烊千玺",
+    "title": "易烊千玺 异常词关注",
+    "description": "艺人 易烊千玺 最近快照出现异常词: 翻车，下次巡检重点关注",
+    "priority": "medium",
+    "status": "pending",
+    "assignee": "",
+    "next_review_time": "2026-06-19T13:53:12.786213",
+    "created_at": "2026-06-19T05:53:12.790608",
+    "updated_at": "2026-06-19T05:53:12.790608",
+    "notes": "",
+    "snapshot_ids": [],
+    "anomaly_words": [
+      "翻车"
+    ]
   }
 ]

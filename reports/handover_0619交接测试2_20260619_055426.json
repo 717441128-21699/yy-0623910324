@@ -1,0 +1,323 @@
+{
+  "generated_at": "2026-06-19T05:54:26.619594",
+  "count": 8,
+  "filter_conditions": {
+    "source": "batch_scan",
+    "platform": "all",
+    "focus_keywords": [],
+    "min_risk": null,
+    "night_report": true,
+    "artist_file": "data/artists_vip.txt",
+    "total_artists_scanned": 8
+  },
+  "trend_summary": {
+    "risk_escalated": [],
+    "risk_decreased": [
+      {
+        "name": "王一博",
+        "old_level": "critical",
+        "new_level": "medium",
+        "old_score": 95.8,
+        "new_score": 40.0
+      },
+      {
+        "name": "易烊千玺",
+        "old_level": "medium",
+        "new_level": "low",
+        "old_score": 25.0,
+        "new_score": 15.0
+      }
+    ],
+    "new_anomalies": {
+      "王一博": [
+        "丑闻",
+        "翻车"
+      ],
+      "肖战": [
+        "退圈"
+      ]
+    },
+    "resolved_anomalies": {
+      "王一博": [
+        "封杀"
+      ],
+      "肖战": [
+        "代言解约"
+      ],
+      "易烊千玺": [
+        "翻车"
+      ]
+    }
+  },
+  "follow_up_suggestions": {
+    "王俊凯": "存在紧急预警词，需立即启动应急预案并持续监控",
+    "肖战": "存在紧急预警词，需立即启动应急预案并持续监控",
+    "王源": "高风险，每2小时复查一次",
+    "华晨宇": "高风险，每2小时复查一次",
+    "王一博": "存在异常词，下次巡检时重点关注",
+    "张艺兴": "存在异常词，下次巡检时重点关注"
+  },
+  "open_followups": [
+    {
+      "id": "821b34e0",
+      "artist_name": "肖战",
+      "title": "代言解约风险监控",
+      "description": "持续监控肖战代言解约相关舆情",
+      "priority": "critical",
+      "status": "pending",
+      "assignee": "张分析师",
+      "next_review_time": "2026-06-20T09:00:00",
+      "created_at": "2026-06-19T05:40:00.659094",
+      "updated_at": "2026-06-19T05:40:00.659094",
+      "notes": "",
+      "snapshot_ids": [],
+      "anomaly_words": []
+    },
+    {
+      "id": "8d5bf109",
+      "artist_name": "王一博",
+      "title": "王一博 紧急预警跟进",
+      "description": "艺人 王一博 最近快照出现紧急预警词: 封杀，需立即启动应急预案持续监控",
+      "priority": "critical",
+      "status": "pending",
+      "assignee": "",
+      "next_review_time": "2026-06-19T07:53:01.263339",
+      "created_at": "2026-06-19T05:53:01.268254",
+      "updated_at": "2026-06-19T05:53:01.268254",
+      "notes": "",
+      "snapshot_ids": [],
+      "anomaly_words": [
+        "封杀"
+      ]
+    },
+    {
+      "id": "e6547ae6",
+      "artist_name": "肖战",
+      "title": "肖战 紧急预警跟进",
+      "description": "艺人 肖战 最近快照出现紧急预警词: 代言解约，需立即启动应急预案持续监控",
+      "priority": "critical",
+      "status": "pending",
+      "assignee": "",
+      "next_review_time": "2026-06-19T07:53:01.270096",
+      "created_at": "2026-06-19T05:53:01.270112",
+      "updated_at": "2026-06-19T05:53:01.270112",
+      "notes": "",
+      "snapshot_ids": [],
+      "anomaly_words": [
+        "代言解约"
+      ]
+    },
+    {
+      "id": "73f515c8",
+      "artist_name": "易烊千玺",
+      "title": "易烊千玺 异常词关注",
+      "description": "艺人 易烊千玺 最近快照出现异常词: 翻车，下次巡检重点关注",
+      "priority": "medium",
+      "status": "pending",
+      "assignee": "",
+      "next_review_time": "2026-06-19T13:53:01.271663",
+      "created_at": "2026-06-19T05:53:01.271674",
+      "updated_at": "2026-06-19T05:53:01.271674",
+      "notes": "",
+      "snapshot_ids": [],
+      "anomaly_words": [
+        "翻车"
+      ]
+    },
+    {
+      "id": "58006843",
+      "artist_name": "易烊千玺",
+      "title": "易烊千玺 异常词关注",
+      "description": "艺人 易烊千玺 最近快照出现异常词: 翻车，下次巡检重点关注",
+      "priority": "medium",
+      "status": "pending",
+      "assignee": "",
+      "next_review_time": "2026-06-19T13:53:12.786213",
+      "created_at": "2026-06-19T05:53:12.790608",
+      "updated_at": "2026-06-19T05:53:12.790608",
+      "notes": "",
+      "snapshot_ids": [],
+      "anomaly_words": [
+        "翻车"
+      ]
+    }
+  ],
+  "batch_comparison": {
+    "has_previous": true,
+    "compared_count": 3,
+    "total_count": 8,
+    "risk_escalated": [],
+    "risk_decreased": [
+      {
+        "name": "王一博",
+        "old_level": "critical",
+        "new_level": "medium",
+        "old_score": 95.8,
+        "new_score": 40.0
+      },
+      {
+        "name": "易烊千玺",
+        "old_level": "medium",
+        "new_level": "low",
+        "old_score": 25.0,
+        "new_score": 15.0
+      }
+    ],
+    "new_anomalies": {
+      "王一博": [
+        "丑闻",
+        "翻车"
+      ],
+      "肖战": [
+        "退圈"
+      ]
+    },
+    "resolved_anomalies": {
+      "王一博": [
+        "封杀"
+      ],
+      "肖战": [
+        "代言解约"
+      ],
+      "易烊千玺": [
+        "翻车"
+      ]
+    }
+  },
+  "snapshots": [
+    {
+      "id": "BATCH-王俊凯",
+      "name": "0619交接测试2",
+      "artist_name": "王俊凯",
+      "created_at": "2026-06-19T05:54:26.573210",
+      "risk_level": "critical",
+      "risk_score": 97.0,
+      "sentiment": "neutral",
+      "sentiment_score": 0.16,
+      "discussion_volume": 7792,
+      "anomaly_words": [
+        "人设崩塌",
+        "抄袭"
+      ],
+      "has_emergency": true,
+      "has_spike": true,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-肖战",
+      "name": "0619交接测试2",
+      "artist_name": "肖战",
+      "created_at": "2026-06-19T05:54:26.572905",
+      "risk_level": "critical",
+      "risk_score": 35.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.39,
+      "discussion_volume": 34812,
+      "anomaly_words": [
+        "退圈"
+      ],
+      "has_emergency": true,
+      "has_spike": false,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-王源",
+      "name": "0619交接测试2",
+      "artist_name": "王源",
+      "created_at": "2026-06-19T05:54:26.573342",
+      "risk_level": "high",
+      "risk_score": 52.8,
+      "sentiment": "neutral",
+      "sentiment_score": -0.17,
+      "discussion_volume": 27713,
+      "anomaly_words": [],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-华晨宇",
+      "name": "0619交接测试2",
+      "artist_name": "华晨宇",
+      "created_at": "2026-06-19T05:54:26.573399",
+      "risk_level": "high",
+      "risk_score": 50.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.79,
+      "discussion_volume": 34812,
+      "anomaly_words": [
+        "黑料",
+        "抄袭"
+      ],
+      "has_emergency": false,
+      "has_spike": true,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-王一博",
+      "name": "0619交接测试2",
+      "artist_name": "王一博",
+      "created_at": "2026-06-19T05:54:26.572807",
+      "risk_level": "medium",
+      "risk_score": 40.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.34,
+      "discussion_volume": 46163,
+      "anomaly_words": [
+        "丑闻",
+        "翻车"
+      ],
+      "has_emergency": false,
+      "has_spike": true,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-张艺兴",
+      "name": "0619交接测试2",
+      "artist_name": "张艺兴",
+      "created_at": "2026-06-19T05:54:26.573090",
+      "risk_level": "medium",
+      "risk_score": 25.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.78,
+      "discussion_volume": 9911,
+      "anomaly_words": [
+        "黑料",
+        "避嫌"
+      ],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-易烊千玺",
+      "name": "0619交接测试2",
+      "artist_name": "易烊千玺",
+      "created_at": "2026-06-19T05:54:26.572974",
+      "risk_level": "low",
+      "risk_score": 15.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.59,
+      "discussion_volume": 7353,
+      "anomaly_words": [],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "批量巡检结果"
+    },
+    {
+      "id": "BATCH-蔡徐坤",
+      "name": "0619交接测试2",
+      "artist_name": "蔡徐坤",
+      "created_at": "2026-06-19T05:54:26.573032",
+      "risk_level": "low",
+      "risk_score": 0,
+      "sentiment": "positive",
+      "sentiment_score": 0.43,
+      "discussion_volume": 27643,
+      "anomaly_words": [],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "批量巡检结果"
+    }
+  ]
+}

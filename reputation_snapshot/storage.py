@@ -21,6 +21,7 @@ class SnapshotStorage:
             storage_dir = os.path.join(os.getcwd(), "snapshots")
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        from .anomaly_detector import AnomalyDetector
         self.anomaly_detector = AnomalyDetector()
 
     def save(
@@ -618,24 +619,91 @@ class SnapshotStorage:
             lines.append("")
             lines.append("## 未闭环跟进事项")
             lines.append("")
-            lines.append(f"| ID | 艺人 | 标题 | 优先级 | 状态 | 负责人 | 下次复查 | 备注 |")
-            lines.append("|----|------|------|--------|------|--------|----------|------|")
+
+            from datetime import datetime as _fdt
+            _now = _fdt.now()
             priority_map = {"low": "低", "medium": "中", "high": "高", "critical": "紧急"}
             status_map = {"pending": "待处理", "in_progress": "处理中", "resolved": "已解决", "closed": "已闭环"}
-            for item in open_followups:
+
+            def _fmt_row(item):
                 next_review = item.get("next_review_time")
                 if next_review:
                     next_review = next_review[:16].replace("T", " ")
                 else:
                     next_review = "-"
                 notes = item.get("notes", "")[:20] + ("..." if len(item.get("notes", "")) > 20 else "")
-                lines.append(
+                return (
                     f"| {item['id']} | {item['artist_name']} | {item['title']} | "
                     f"{priority_map.get(item['priority'], item['priority'])} | "
                     f"{status_map.get(item['status'], item['status'])} | "
-                    f"{item.get('assignee', '-') or '-'} | {next_review} | {notes or '-'} |"
+                    f"{next_review} | {notes or '-'} |"
                 )
+
+            overdue = []
+            due_soon = []
+            no_deadline = []
+            for item in open_followups:
+                nr = item.get("next_review_time")
+                if nr:
+                    try:
+                        nr_dt = _fdt.fromisoformat(nr)
+                        if nr_dt < _now:
+                            overdue.append(item)
+                        elif (nr_dt - _now).total_seconds() <= 2 * 3600:
+                            due_soon.append(item)
+                        else:
+                            no_deadline.append(item)
+                    except Exception:
+                        no_deadline.append(item)
+                else:
+                    no_deadline.append(item)
+
+            if overdue:
+                lines.append(f"> ⚠️ **已超时复查事项：{len(overdue)} 项，请优先处理**")
+                lines.append("")
+                lines.append("| ID | 艺人 | 标题 | 优先级 | 状态 | 下次复查 | 备注 |")
+                lines.append("|----|------|------|--------|------|----------|------|")
+                for item in sorted(overdue, key=lambda x: x.get("next_review_time", "")):
+                    lines.append(_fmt_row(item))
+                lines.append("")
+
+            if due_soon:
+                lines.append(f"> ⏰ **2小时内到复查点：{len(due_soon)} 项**")
+                lines.append("")
+                lines.append("| ID | 艺人 | 标题 | 优先级 | 状态 | 下次复查 | 备注 |")
+                lines.append("|----|------|------|--------|------|----------|------|")
+                for item in sorted(due_soon, key=lambda x: x.get("next_review_time", "")):
+                    lines.append(_fmt_row(item))
+                lines.append("")
+
+            lines.append("### 按负责人分组")
             lines.append("")
+            by_assignee = {}
+            for item in open_followups:
+                assignee = item.get("assignee") or "未分配"
+                by_assignee.setdefault(assignee, []).append(item)
+
+            for assignee in sorted(by_assignee.keys()):
+                items_a = by_assignee[assignee]
+                crit_count = len([i for i in items_a if i["priority"] == "critical"])
+                high_count = len([i for i in items_a if i["priority"] == "high"])
+                lines.append(f"#### 👤 {assignee}（共 {len(items_a)} 项，紧急 {crit_count}，高 {high_count}）")
+                lines.append("")
+                lines.append("| ID | 艺人 | 标题 | 优先级 | 状态 | 下次复查 | 备注 |")
+                lines.append("|----|------|------|--------|------|----------|------|")
+                items_sorted = sorted(items_a, key=lambda x: (
+                    {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(x["priority"], 5),
+                    x.get("next_review_time") or "9999",
+                ))
+                for item in items_sorted:
+                    lines.append(_fmt_row(item))
+                lines.append("")
+
+            if no_deadline and not overdue and not due_soon:
+                lines.append(f"> ✅ 暂无超时或即将到复查点的事项（{len(no_deadline)} 项正常待处理）")
+                lines.append("")
+
+            del _fdt, _now
 
         content = "\n".join(lines)
         output_path = Path(output_path)
@@ -954,3 +1022,124 @@ class FollowUpStorage:
             i for i in self._load_all()
             if i["status"] in [FollowUpStatus.PENDING.value, FollowUpStatus.IN_PROGRESS.value, FollowUpStatus.RESOLVED.value]
         ]
+
+    def _is_duplicate(self, artist_name: str, category: str, anomaly_words: List[str] = None) -> bool:
+        open_items = self.get_open_items()
+        for item in open_items:
+            if item["artist_name"] != artist_name:
+                continue
+            item_title = item["title"]
+            item_anomalies = set(item.get("anomaly_words", []))
+            if category == "emergency" and "紧急预警" in item_title:
+                return True
+            if category == "critical" and "极高风险" in item_title:
+                return True
+            if category == "high" and "高风险" in item_title:
+                return True
+            if category == "recurrent" and "反复出现" in item_title:
+                if anomaly_words:
+                    if item_anomalies & set(anomaly_words):
+                        return True
+                else:
+                    return True
+        return False
+
+    def auto_create_from_history(
+        self,
+        artist_names: List[str],
+        snapshot_storage: "SnapshotStorage",
+    ) -> Dict:
+        created = []
+        skipped = []
+        from datetime import timedelta as _td
+
+        for name in artist_names:
+            history = snapshot_storage.get_artist_history(name, limit=5)
+            if not history:
+                continue
+            latest = history[-1]
+
+            anomaly_counts = {}
+            for h in history:
+                for w in h.get("anomaly_words", []):
+                    anomaly_counts[w] = anomaly_counts.get(w, 0) + 1
+            recurrent_words = [w for w, c in anomaly_counts.items() if c >= 2]
+            latest_anomalies = latest.get("anomaly_words", [])
+            has_emergency = latest.get("has_emergency", False)
+            risk_level = latest["risk_level"]
+
+            if has_emergency:
+                if not self._is_duplicate(name, "emergency", latest_anomalies):
+                    item_id = self.add(
+                        artist_name=name,
+                        title=f"{name} 紧急预警跟进",
+                        description=f"艺人 {name} 最近快照出现紧急预警词: {', '.join(latest_anomalies)}，需立即启动应急预案持续监控",
+                        priority="critical",
+                        next_review_time=datetime.now() + _td(hours=2),
+                        anomaly_words=latest_anomalies,
+                    )
+                    created.append({"id": item_id, "artist": name, "category": "emergency", "reason": f"紧急预警词: {', '.join(latest_anomalies)}"})
+                else:
+                    skipped.append({"artist": name, "category": "emergency", "reason": "已有同类未闭环事项"})
+                continue
+
+            if risk_level == "critical":
+                if not self._is_duplicate(name, "critical", latest_anomalies):
+                    item_id = self.add(
+                        artist_name=name,
+                        title=f"{name} 极高风险跟进",
+                        description=f"艺人 {name} 最近快照风险分 {latest['risk_score']:.0f}，为极高风险等级，需专人持续监控",
+                        priority="critical",
+                        next_review_time=datetime.now() + _td(hours=2),
+                        anomaly_words=latest_anomalies,
+                    )
+                    created.append({"id": item_id, "artist": name, "category": "critical", "reason": f"风险分 {latest['risk_score']:.0f}(极高风险)"})
+                else:
+                    skipped.append({"artist": name, "category": "critical", "reason": "已有同类未闭环事项"})
+                continue
+
+            if risk_level == "high":
+                if not self._is_duplicate(name, "high", latest_anomalies):
+                    item_id = self.add(
+                        artist_name=name,
+                        title=f"{name} 高风险跟进",
+                        description=f"艺人 {name} 最近快照风险分 {latest['risk_score']:.0f}，为高风险等级，建议每2小时复查",
+                        priority="high",
+                        next_review_time=datetime.now() + _td(hours=4),
+                        anomaly_words=latest_anomalies,
+                    )
+                    created.append({"id": item_id, "artist": name, "category": "high", "reason": f"风险分 {latest['risk_score']:.0f}(高风险)"})
+                else:
+                    skipped.append({"artist": name, "category": "high", "reason": "已有同类未闭环事项"})
+                continue
+
+            if latest_anomalies:
+                if recurrent_words:
+                    if not self._is_duplicate(name, "recurrent", recurrent_words):
+                        item_id = self.add(
+                            artist_name=name,
+                            title=f"{name} 反复异常词跟进",
+                            description=f"艺人 {name} 最近 {len(history)} 次快照中反复出现异常词: {', '.join(recurrent_words)}，需重点关注",
+                            priority="high" if len(recurrent_words) >= 2 else "medium",
+                            next_review_time=datetime.now() + _td(hours=6),
+                            anomaly_words=recurrent_words,
+                        )
+                        created.append({"id": item_id, "artist": name, "category": "recurrent", "reason": f"反复异常词: {', '.join(recurrent_words)}"})
+                    else:
+                        skipped.append({"artist": name, "category": "recurrent", "reason": "已有同类未闭环事项"})
+                elif latest_anomalies:
+                    if not self._is_duplicate(name, "anomaly", latest_anomalies):
+                        item_id = self.add(
+                            artist_name=name,
+                            title=f"{name} 异常词关注",
+                            description=f"艺人 {name} 最近快照出现异常词: {', '.join(latest_anomalies)}，下次巡检重点关注",
+                            priority="medium",
+                            next_review_time=datetime.now() + _td(hours=8),
+                            anomaly_words=latest_anomalies,
+                        )
+                        created.append({"id": item_id, "artist": name, "category": "anomaly", "reason": f"异常词: {', '.join(latest_anomalies)}"})
+                    else:
+                        skipped.append({"artist": name, "category": "anomaly", "reason": "已有同类未闭环事项"})
+
+        del _td
+        return {"created": created, "skipped": skipped, "total_created": len(created), "total_skipped": len(skipped)}
