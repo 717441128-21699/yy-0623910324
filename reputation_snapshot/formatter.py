@@ -5,8 +5,37 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import box
 
-from .models import AnalysisResult, RiskLevel, Sentiment, BatchScanResult
+from .models import AnalysisResult, RiskLevel, Sentiment, BatchScanResult, FollowUpStatus
 from .anomaly_detector import AnomalyDetector
+
+
+STATUS_LABELS = {
+    "pending": "待处理",
+    "in_progress": "处理中",
+    "resolved": "已解决",
+    "closed": "已闭环",
+}
+
+STATUS_COLORS = {
+    "pending": "bright_yellow",
+    "in_progress": "bright_blue",
+    "resolved": "bright_magenta",
+    "closed": "dim",
+}
+
+PRIORITY_LABELS = {
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "critical": "紧急",
+}
+
+PRIORITY_COLORS = {
+    "low": "dim",
+    "medium": "bright_yellow",
+    "high": "bright_magenta",
+    "critical": "blink bold bright_red",
+}
 
 
 RISK_COLORS = {
@@ -1274,4 +1303,172 @@ class OutputFormatter:
                 "[bright_green]本次巡检与上次相比无风险升高和新增异常词，态势平稳[/bright_green]",
                 border_style="bright_green"
             ))
+
+    def print_followup_list(self, items: List[Dict]):
+        if not items:
+            self.console.print(Panel("[dim]暂无跟进事项[/dim]", border_style="dim"))
+            return
+
+        table = Table(
+            Column("ID", width=10),
+            Column("艺人", width=12),
+            Column("标题", width=25),
+            Column("优先级", width=8, justify="center"),
+            Column("状态", width=10, justify="center"),
+            Column("负责人", width=10),
+            Column("下次复查", width=18),
+            Column("创建时间", width=18),
+            Column("备注", width=25),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for item in items:
+            priority = item["priority"]
+            status = item["status"]
+            priority_text = Text(PRIORITY_LABELS.get(priority, priority),
+                                style=PRIORITY_COLORS.get(priority, "dim"))
+            status_text = Text(STATUS_LABELS.get(status, status),
+                              style=STATUS_COLORS.get(status, "dim"))
+            next_review = item.get("next_review_time")
+            if next_review:
+                next_review = next_review[:16].replace("T", " ")
+            else:
+                next_review = "-"
+            created_at = item["created_at"][:16].replace("T", " ")
+            notes = item.get("notes", "")[:20] + ("..." if len(item.get("notes", "")) > 20 else "")
+            table.add_row(
+                item["id"],
+                item["artist_name"],
+                item["title"],
+                priority_text,
+                status_text,
+                item.get("assignee", "-") or "-",
+                next_review,
+                created_at,
+                notes or "-",
+            )
+
+        open_count = len([i for i in items if i["status"] in ["pending", "in_progress", "resolved"]])
+        title = f"📋 跟进台账（共 {len(items)} 条，未闭环 {open_count} 条）"
+        self.console.print(Panel(table, title=title, title_align="left", border_style="bright_blue"))
+
+    def print_window_stats(self, artist_name: str, stats: Dict):
+        WINDOW_LABELS = {"24h": "24小时", "7d": "7天", "30d": "30天"}
+        TREND_LABELS = {
+            "rising": ("🔥 持续升温", "bright_red"),
+            "falling": ("✅ 持续降温", "bright_green"),
+            "stable": ("→ 波动平稳", "bright_yellow"),
+            "insufficient_data": ("- 数据不足", "dim"),
+        }
+
+        table = Table(
+            Column("时间窗口", width=12, justify="center"),
+            Column("快照数", width=8, justify="center"),
+            Column("风险峰值", width=12, justify="center"),
+            Column("讨论量峰值", width=12, justify="right"),
+            Column("高频异常词", width=25),
+            Column("趋势判断", width=14, justify="center"),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for window in ["24h", "7d", "30d"]:
+            data = stats[window]
+            if data["snapshot_count"] == 0:
+                table.add_row(
+                    WINDOW_LABELS[window],
+                    Text("0", style="dim"),
+                    Text("-", style="dim"),
+                    Text("-", style="dim"),
+                    Text("-", style="dim"),
+                    Text("-", style="dim"),
+                )
+                continue
+
+            risk_level = data["peak_risk_level"]
+            risk_color = RISK_COLORS.get(RiskLevel(risk_level), "dim")
+            risk_text = Text(f"{data['peak_risk_score']:.0f}", style=risk_color)
+
+            volume_text = Text(f"{data['peak_discussion_volume']:,}", style="bright_cyan")
+
+            anomaly_parts = []
+            for word, count in data["anomaly_word_counts"].items():
+                style = "blink bold bright_red" if count >= 3 else "bright_red"
+                anomaly_parts.append(Text(f"{word}×{count}", style=style))
+            anomaly_text = Text(" ")
+            for i, part in enumerate(anomaly_parts):
+                if i > 0:
+                    anomaly_text.append(", ")
+                anomaly_text.append(part)
+            if not anomaly_parts:
+                anomaly_text = Text("-", style="dim")
+
+            trend_label, trend_color = TREND_LABELS.get(data["trend"], ("-", "dim"))
+            trend_text = Text(trend_label, style=trend_color)
+
+            table.add_row(
+                WINDOW_LABELS[window],
+                str(data["snapshot_count"]),
+                risk_text,
+                volume_text,
+                anomaly_text,
+                trend_text,
+            )
+
+        self.console.print(
+            Panel(table, title=f"⏱️ 时间窗口汇总 - {artist_name}", title_align="left", border_style="bright_cyan")
+        )
+        self.console.print()
+
+    def print_archive_preview(self, result: Dict):
+        if result["archived"] == 0:
+            self.console.print(Panel(
+                "[dim]没有需要归档的快照[/dim]",
+                title="⚠️ 归档预览",
+                title_align="left",
+                border_style="bright_yellow"
+            ))
+            return
+
+        table = Table(
+            Column("ID", width=12),
+            Column("名称", width=20),
+            Column("艺人", width=12),
+            Column("风险等级", width=10, justify="center"),
+            Column("创建时间", width=20),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for detail in result["archived_details"]:
+            risk_level = detail["risk_level"]
+            risk_color = RISK_COLORS.get(RiskLevel(risk_level), "dim")
+            risk_text = Text(RISK_LABELS.get(RiskLevel(risk_level), risk_level),
+                              style=risk_color)
+            created_at = detail["created_at"][:16].replace("T", " ")
+            table.add_row(
+                detail["id"],
+                detail["name"],
+                detail["artist_name"],
+                risk_text,
+                created_at,
+            )
+
+        title = f"📦 归档预览（共 {result['archived']} 个快照）"
+        self.console.print(Panel(table, title=title, title_align="left", border_style="bright_yellow"))
+
+        info_lines = []
+        info_lines.append(f"涉及艺人: {', '.join(result['artist_names'][:5])}")
+        if len(result['artist_names']) > 5:
+            info_lines[-1] += f" 等 {len(result['artist_names'])} 人"
+        if result['time_range']['earliest'] and result['time_range']['latest']:
+            earliest = result['time_range']['earliest'][:16].replace("T", " ")
+            latest = result['time_range']['latest'][:16].replace("T", " ")
+            info_lines.append(f"时间范围: {earliest} ~ {latest}")
+        info_lines.append(f"归档目录: {result['archive_dir']}")
+        info_lines.append(f"归档后剩余: {result['remaining']} 个快照")
+
+        info_text = Text("\n").join([Text(line, style="dim") for line in info_lines])
+        self.console.print(Panel(info_text, border_style="dim"))
 

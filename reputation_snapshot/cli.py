@@ -4,9 +4,9 @@ from typing import List
 
 from .analyzer import ReputationAnalyzer
 from .batch_scanner import BatchScanner
-from .storage import SnapshotStorage
+from .storage import SnapshotStorage, FollowUpStorage
 from .formatter import OutputFormatter
-from .models import Artist, RiskLevel
+from .models import Artist, RiskLevel, FollowUpStatus
 
 
 class Context:
@@ -14,6 +14,7 @@ class Context:
         self.analyzer = ReputationAnalyzer()
         self.batch_scanner = BatchScanner()
         self.storage = SnapshotStorage()
+        self.followup_storage = FollowUpStorage()
         self.formatter = OutputFormatter()
 
 
@@ -152,6 +153,17 @@ def analyze(
     is_flag=True,
     help="与上次巡检对比，显示风险升降和异常词变化",
 )
+@click.option(
+    "--save-all",
+    is_flag=True,
+    help="扫描完成后一键保存所有艺人的巡检快照",
+)
+@click.option(
+    "--name-prefix",
+    type=str,
+    default="批量巡检",
+    help="批量保存快照的名称前缀",
+)
 @pass_ctx
 def batch(
     ctx: Context,
@@ -163,6 +175,8 @@ def batch(
     min_risk: str,
     night_report: bool,
     compare_last: bool,
+    save_all: bool,
+    name_prefix: str,
 ):
     """批量扫描多位艺人并按风险等级排序"""
     try:
@@ -193,10 +207,94 @@ def batch(
         summary = ctx.batch_scanner.get_risk_summary(results)
         ctx.formatter.print_batch_results(results, summary, night_report=night_report)
 
+        comparison = None
         if compare_last:
             artist_names = [a.name for a in artists]
-            comparison = ctx.storage.get_batch_comparison(artist_names)
+            current_result_dicts = []
+            for r in results:
+                ar = r.analysis_result
+                current_result_dicts.append({
+                    "artist_name": ar.artist_name,
+                    "risk_level": ar.risk_level.value,
+                    "risk_score": ar.risk_score,
+                    "discussion_volume": ar.discussion_volume,
+                    "sentiment": ar.sentiment.value,
+                    "top_trending_words": [
+                        {"word": w.word, "count": w.count, "growth_rate": w.growth_rate, "is_anomaly": w.is_anomaly}
+                        for w in ar.top_trending_words
+                    ],
+                })
+            comparison = ctx.storage.get_batch_comparison(artist_names, current_results=current_result_dicts)
             ctx.formatter.print_batch_comparison(comparison)
+
+        if save_all:
+            result_dicts = []
+            for r in results:
+                ar = r.analysis_result
+                result_dicts.append({
+                    "artist_name": ar.artist_name,
+                    "discussion_volume": ar.discussion_volume,
+                    "volume_change": ar.volume_change,
+                    "sentiment": ar.sentiment.value,
+                    "sentiment_score": ar.sentiment_score,
+                    "top_trending_words": [
+                        {"word": w.word, "count": w.count, "growth_rate": w.growth_rate, "is_anomaly": w.is_anomaly}
+                        for w in ar.top_trending_words
+                    ],
+                    "controversy_points": [
+                        {
+                            "keyword": c.keyword, "mentions": c.mentions,
+                            "sentiment": c.sentiment.value, "description": c.description,
+                            "spread_potential": c.spread_potential
+                        }
+                        for c in ar.controversy_points
+                    ],
+                    "anomaly_words": ar.anomaly_words,
+                    "risk_level": ar.risk_level.value,
+                    "risk_score": ar.risk_score,
+                    "platform": ar.platform,
+                    "start_time": ar.start_time.isoformat(),
+                    "end_time": ar.end_time.isoformat(),
+                    "analyzed_at": ar.analyzed_at.isoformat(),
+                    "focus_keywords": ar.focus_keywords,
+                })
+            saved = ctx.storage.save_batch_snapshots(result_dicts, name_prefix=name_prefix)
+            ctx.formatter.print_success(f"✓ 已批量保存 {len(saved)} 个快照，前缀：{name_prefix}")
+
+        elif compare_last and not save_all:
+            if click.confirm("\n是否保存本次批量巡检结果？", default=False):
+                result_dicts = []
+                for r in results:
+                    ar = r.analysis_result
+                    result_dicts.append({
+                        "artist_name": ar.artist_name,
+                        "discussion_volume": ar.discussion_volume,
+                        "volume_change": ar.volume_change,
+                        "sentiment": ar.sentiment.value,
+                        "sentiment_score": ar.sentiment_score,
+                        "top_trending_words": [
+                            {"word": w.word, "count": w.count, "growth_rate": w.growth_rate, "is_anomaly": w.is_anomaly}
+                            for w in ar.top_trending_words
+                        ],
+                        "controversy_points": [
+                            {
+                                "keyword": c.keyword, "mentions": c.mentions,
+                                "sentiment": c.sentiment.value, "description": c.description,
+                                "spread_potential": c.spread_potential
+                            }
+                            for c in ar.controversy_points
+                        ],
+                        "anomaly_words": ar.anomaly_words,
+                        "risk_level": ar.risk_level.value,
+                        "risk_score": ar.risk_score,
+                        "platform": ar.platform,
+                        "start_time": ar.start_time.isoformat(),
+                        "end_time": ar.end_time.isoformat(),
+                        "analyzed_at": ar.analyzed_at.isoformat(),
+                        "focus_keywords": ar.focus_keywords,
+                    })
+                saved = ctx.storage.save_batch_snapshots(result_dicts, name_prefix=name_prefix)
+                ctx.formatter.print_success(f"✓ 已批量保存 {len(saved)} 个快照，前缀：{name_prefix}")
 
     except FileNotFoundError as e:
         ctx.formatter.print_error(str(e))
@@ -285,16 +383,18 @@ def list_snapshots(
 
         trend_summary = None
         follow_up_suggestions = None
+        batch_comparison = None
+        open_followups = None
 
         if export_md or export_json:
             artist_names = list(set(s["artist_name"] for s in snapshots))
             if artist_names:
-                comparison = ctx.storage.get_batch_comparison(artist_names)
+                batch_comparison = ctx.storage.get_batch_comparison(artist_names)
                 trend_summary = {
-                    "risk_escalated": comparison.get("risk_escalated", []),
-                    "risk_decreased": comparison.get("risk_decreased", []),
-                    "new_anomalies": comparison.get("new_anomalies", {}),
-                    "resolved_anomalies": comparison.get("resolved_anomalies", {}),
+                    "risk_escalated": batch_comparison.get("risk_escalated", []),
+                    "risk_decreased": batch_comparison.get("risk_decreased", []),
+                    "new_anomalies": batch_comparison.get("new_anomalies", {}),
+                    "resolved_anomalies": batch_comparison.get("resolved_anomalies", {}),
                 }
 
                 follow_up_suggestions = {}
@@ -314,12 +414,16 @@ def list_snapshots(
                         else:
                             follow_up_suggestions[name] = "态势平稳，正常频率巡检"
 
+            open_followups = ctx.followup_storage.get_open_items()
+
         if export_md:
             path = ctx.storage.export_markdown(
                 snapshots, export_md, title,
                 filter_conditions=filter_conditions,
                 trend_summary=trend_summary,
                 follow_up_suggestions=follow_up_suggestions,
+                open_followups=open_followups,
+                batch_comparison=batch_comparison,
             )
             ctx.formatter.print_success(f"Markdown报告已导出: {path}")
 
@@ -329,6 +433,8 @@ def list_snapshots(
                 filter_conditions=filter_conditions,
                 trend_summary=trend_summary,
                 follow_up_suggestions=follow_up_suggestions,
+                open_followups=open_followups,
+                batch_comparison=batch_comparison,
             )
             ctx.formatter.print_success(f"JSON报告已导出: {path}")
 
@@ -345,8 +451,13 @@ def list_snapshots(
     default=10,
     help="显示最近N次快照，默认10",
 )
+@click.option(
+    "--no-stats",
+    is_flag=True,
+    help="不显示时间窗口汇总统计",
+)
 @pass_ctx
-def history(ctx: Context, artist_name: str, limit: int):
+def history(ctx: Context, artist_name: str, limit: int, no_stats: bool):
     """查看艺人的快照趋势视图
 
     ARTIST_NAME: 艺人名称
@@ -354,6 +465,9 @@ def history(ctx: Context, artist_name: str, limit: int):
     try:
         snapshots = ctx.storage.get_artist_history(artist_name, limit=limit)
         ctx.formatter.print_artist_history(artist_name, snapshots)
+        if not no_stats:
+            stats = ctx.storage.get_artist_window_stats(artist_name)
+            ctx.formatter.print_window_stats(artist_name, stats)
     except Exception as e:
         ctx.formatter.print_error(f"获取趋势数据失败: {str(e)}")
         raise click.Abort()
@@ -550,19 +664,39 @@ def restore(ctx: Context, backup_path: str, merge: bool, yes: bool):
     is_flag=True,
     help="跳过确认直接归档",
 )
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="预览模式：仅显示将归档的快照信息，不实际移动",
+)
 @pass_ctx
-def archive(ctx: Context, before: str, archive_dir: str, yes: bool):
+def archive(ctx: Context, before: str, archive_dir: str, yes: bool, dry_run: bool):
     """归档指定时间之前的快照（移动到归档目录，不删除）"""
     try:
         before_dt = _parse_datetime(before)
 
+        result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=True)
+
+        if dry_run:
+            ctx.formatter.print_archive_preview(result)
+            if result["archived"] > 0 and click.confirm(
+                f"\n预览完成，是否确认归档以上 {result['archived']} 个快照？",
+                default=False,
+            ):
+                result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=False)
+                ctx.formatter.print_success(
+                    f"归档完成: 归档 {result['archived']} 个快照，剩余 {result['remaining']} 个"
+                )
+            return
+
         if not yes:
+            ctx.formatter.print_archive_preview(result)
             click.confirm(
-                f"确定要归档 {before} 之前的快照吗？数据将移动到归档目录而非删除。",
+                f"\n确定要归档以上 {result['archived']} 个快照吗？数据将移动到归档目录而非删除。",
                 abort=True,
             )
+            result = ctx.storage.archive_before(before_dt, archive_dir, dry_run=False)
 
-        result = ctx.storage.archive_before(before_dt, archive_dir)
         ctx.formatter.print_success(
             f"归档完成: 归档 {result['archived']} 个快照，剩余 {result['remaining']} 个"
         )
@@ -615,6 +749,160 @@ def init(ctx: Context, path: str):
     except Exception as e:
         ctx.formatter.print_error(f"生成示例文件失败: {str(e)}")
         raise click.Abort()
+
+
+@click.group()
+@pass_ctx
+def followup(ctx: Context):
+    """跟进台账管理 - 管理重点艺人的待跟进事项"""
+    pass
+
+
+@followup.command(name="add")
+@click.argument("artist_name")
+@click.option("-t", "--title", type=str, required=True, help="事项标题")
+@click.option("-d", "--description", type=str, default="", help="详细描述")
+@click.option("-p", "--priority", type=click.Choice(["low", "medium", "high", "critical"]), default="medium", help="优先级")
+@click.option("-a", "--assignee", type=str, default="", help="负责人")
+@click.option("-r", "--next-review", type=str, default=None, help="下次复查时间，格式：YYYY-MM-DD HH:MM")
+@click.option("-n", "--notes", type=str, default="", help="备注")
+@click.option("-s", "--snapshot-id", multiple=True, help="关联快照ID，可多次指定")
+@pass_ctx
+def followup_add(
+    ctx: Context,
+    artist_name: str,
+    title: str,
+    description: str,
+    priority: str,
+    assignee: str,
+    next_review: str,
+    notes: str,
+    snapshot_id: List[str],
+):
+    """新增跟进事项"""
+    try:
+        next_review_dt = _parse_datetime(next_review) if next_review else None
+        item_id = ctx.followup_storage.add(
+            artist_name=artist_name,
+            title=title,
+            description=description,
+            priority=priority,
+            assignee=assignee,
+            next_review_time=next_review_dt,
+            notes=notes,
+            snapshot_ids=list(snapshot_id),
+        )
+        ctx.formatter.print_success(f"✓ 跟进事项已创建，ID: {item_id}")
+    except Exception as e:
+        ctx.formatter.print_error(f"创建跟进事项失败: {str(e)}")
+        raise click.Abort()
+
+
+@followup.command(name="list")
+@click.option("-s", "--status", type=click.Choice(["pending", "in_progress", "resolved", "closed"]), default=None, help="按状态筛选")
+@click.option("-a", "--artist", type=str, default=None, help="按艺人筛选")
+@click.option("-p", "--priority", type=click.Choice(["low", "medium", "high", "critical"]), default=None, help="按优先级筛选")
+@click.option("--open-only", is_flag=True, help="仅显示未闭环事项")
+@pass_ctx
+def followup_list(ctx: Context, status: str, artist: str, priority: str, open_only: bool):
+    """列出跟进事项"""
+    try:
+        if open_only:
+            items = ctx.followup_storage.get_open_items()
+            if artist:
+                items = [i for i in items if i["artist_name"] == artist]
+            if priority:
+                items = [i for i in items if i["priority"] == priority]
+            items = sorted(items, key=lambda x: x["created_at"], reverse=True)
+        else:
+            items = ctx.followup_storage.list(status=status, artist=artist, priority=priority)
+        ctx.formatter.print_followup_list(items)
+    except Exception as e:
+        ctx.formatter.print_error(f"列出跟进事项失败: {str(e)}")
+        raise click.Abort()
+
+
+@followup.command(name="update")
+@click.argument("item_id")
+@click.option("-s", "--status", type=click.Choice(["pending", "in_progress", "resolved", "closed"]), default=None, help="更新状态")
+@click.option("-a", "--assignee", type=str, default=None, help="更新负责人")
+@click.option("-r", "--next-review", type=str, default=None, help="更新下次复查时间")
+@click.option("-n", "--notes", type=str, default=None, help="更新备注")
+@click.option("-p", "--priority", type=click.Choice(["low", "medium", "high", "critical"]), default=None, help="更新优先级")
+@pass_ctx
+def followup_update(
+    ctx: Context,
+    item_id: str,
+    status: str,
+    assignee: str,
+    next_review: str,
+    notes: str,
+    priority: str,
+):
+    """更新跟进事项"""
+    try:
+        next_review_dt = _parse_datetime(next_review) if next_review else None
+        if next_review is not None and not next_review_dt:
+            next_review_dt = None
+        success = ctx.followup_storage.update(
+            item_id=item_id,
+            status=status,
+            assignee=assignee,
+            next_review_time=next_review_dt,
+            notes=notes,
+            priority=priority,
+        )
+        if success:
+            ctx.formatter.print_success(f"✓ 跟进事项 {item_id} 已更新")
+        else:
+            ctx.formatter.print_error(f"未找到跟进事项: {item_id}")
+            raise click.Abort()
+    except Exception as e:
+        ctx.formatter.print_error(f"更新跟进事项失败: {str(e)}")
+        raise click.Abort()
+
+
+@followup.command(name="close")
+@click.argument("item_id")
+@click.option("-n", "--notes", type=str, default="", help="关闭备注")
+@pass_ctx
+def followup_close(ctx: Context, item_id: str, notes: str):
+    """关闭（闭环）跟进事项"""
+    try:
+        success = ctx.followup_storage.close(item_id, notes=notes)
+        if success:
+            ctx.formatter.print_success(f"✓ 跟进事项 {item_id} 已闭环")
+        else:
+            ctx.formatter.print_error(f"未找到跟进事项: {item_id}")
+            raise click.Abort()
+    except Exception as e:
+        ctx.formatter.print_error(f"关闭跟进事项失败: {str(e)}")
+        raise click.Abort()
+
+
+@followup.command(name="delete")
+@click.argument("item_id")
+@click.option("--yes", is_flag=True, help="跳过确认直接删除")
+@pass_ctx
+def followup_delete(ctx: Context, item_id: str, yes: bool):
+    """删除跟进事项"""
+    try:
+        if not yes:
+            click.confirm(f"确定要删除跟进事项 {item_id} 吗？", abort=True)
+        success = ctx.followup_storage.delete(item_id)
+        if success:
+            ctx.formatter.print_success(f"✓ 跟进事项 {item_id} 已删除")
+        else:
+            ctx.formatter.print_error(f"未找到跟进事项: {item_id}")
+            raise click.Abort()
+    except click.Abort:
+        raise
+    except Exception as e:
+        ctx.formatter.print_error(f"删除跟进事项失败: {str(e)}")
+        raise click.Abort()
+
+
+cli.add_command(followup)
 
 
 def _parse_datetime(dt_str: str) -> datetime:

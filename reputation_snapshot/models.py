@@ -85,3 +85,27 @@ class BatchScanResult:
     analysis_result: AnalysisResult
     risk_level: RiskLevel
     risk_score: float
+
+
+class FollowUpStatus(Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+@dataclass
+class FollowUpItem:
+    id: str
+    artist_name: str
+    title: str
+    description: str
+    priority: str
+    status: FollowUpStatus
+    assignee: str
+    next_review_time: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+    notes: str = ""
+    snapshot_ids: List[str] = field(default_factory=list)
+    anomaly_words: List[str] = field(default_factory=list)

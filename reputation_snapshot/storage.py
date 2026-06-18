@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict
 from pathlib import Path
 
-from .models import Snapshot, AnalysisResult, Sentiment, RiskLevel, TrendingWord, ControversyPoint
+from .models import Snapshot, AnalysisResult, Sentiment, RiskLevel, TrendingWord, ControversyPoint, FollowUpItem, FollowUpStatus
 from .anomaly_detector import AnomalyDetector
 
 
@@ -146,15 +146,106 @@ class SnapshotStorage:
         snapshots.sort(key=lambda x: x["created_at"])
         return snapshots[-limit:] if limit else snapshots
 
-    def get_batch_comparison(self, artist_names: List[str]) -> Dict:
+    def get_artist_window_stats(self, artist_name: str) -> Dict:
+        now = datetime.now()
+        windows = {
+            "24h": now - timedelta(hours=24),
+            "7d": now - timedelta(days=7),
+            "30d": now - timedelta(days=30),
+        }
+
+        all_history = self.get_artist_history(artist_name, limit=None)
+        result = {}
+
+        for window_name, window_start in windows.items():
+            window_snapshots = [
+                s for s in all_history
+                if datetime.fromisoformat(s["created_at"]) >= window_start
+            ]
+
+            if not window_snapshots:
+                result[window_name] = {
+                    "snapshot_count": 0,
+                    "peak_risk_score": 0,
+                    "peak_risk_level": "low",
+                    "peak_discussion_volume": 0,
+                    "anomaly_word_counts": {},
+                    "has_emergency": False,
+                    "has_spike": False,
+                    "trend": "insufficient_data",
+                }
+                continue
+
+            peak_risk = max(window_snapshots, key=lambda x: x["risk_score"])
+            peak_volume = max(window_snapshots, key=lambda x: x["discussion_volume"])
+
+            anomaly_counts = {}
+            for s in window_snapshots:
+                for word in s.get("anomaly_words", []):
+                    anomaly_counts[word] = anomaly_counts.get(word, 0) + 1
+
+            sorted_counts = sorted(anomaly_counts.items(), key=lambda x: -x[1])
+            top_anomalies = dict(sorted_counts[:5])
+
+            risk_scores = [s["risk_score"] for s in window_snapshots]
+            if len(risk_scores) >= 2:
+                first_half = risk_scores[:len(risk_scores) // 2]
+                second_half = risk_scores[len(risk_scores) // 2:]
+                avg_first = sum(first_half) / len(first_half)
+                avg_second = sum(second_half) / len(second_half)
+                if avg_second - avg_first > 10:
+                    trend = "rising"
+                elif avg_first - avg_second > 10:
+                    trend = "falling"
+                else:
+                    trend = "stable"
+            else:
+                trend = "insufficient_data"
+
+            result[window_name] = {
+                "snapshot_count": len(window_snapshots),
+                "peak_risk_score": peak_risk["risk_score"],
+                "peak_risk_level": peak_risk["risk_level"],
+                "peak_discussion_volume": peak_volume["discussion_volume"],
+                "anomaly_word_counts": top_anomalies,
+                "has_emergency": any(s.get("has_emergency") for s in window_snapshots),
+                "has_spike": any(s.get("has_spike") for s in window_snapshots),
+                "trend": trend,
+            }
+
+        return result
+
+    def get_batch_comparison(self, artist_names: List[str], current_results: Optional[List[Dict]] = None) -> Dict:
         current_map = {}
         previous_map = {}
-        for name in artist_names:
-            history = self.get_artist_history(name, limit=2)
-            if len(history) >= 1:
-                current_map[name] = history[-1]
-            if len(history) >= 2:
-                previous_map[name] = history[-2]
+
+        if current_results is not None:
+            for result in current_results:
+                name = result["artist_name"]
+                anomalies = self.anomaly_detector.detect([
+                    TrendingWord(**w) for w in result["top_trending_words"]
+                ])
+                current_map[name] = {
+                    "name": name,
+                    "risk_level": result["risk_level"],
+                    "risk_score": result["risk_score"],
+                    "anomaly_words": [a["word"] for a in anomalies],
+                    "has_emergency": any(a.get("is_emergency") for a in anomalies),
+                    "has_spike": any(a.get("is_spike") for a in anomalies),
+                    "discussion_volume": result["discussion_volume"],
+                    "sentiment": result["sentiment"],
+                }
+            for name in artist_names:
+                history = self.get_artist_history(name, limit=1)
+                if history:
+                    previous_map[name] = history[0]
+        else:
+            for name in artist_names:
+                history = self.get_artist_history(name, limit=2)
+                if len(history) >= 1:
+                    current_map[name] = history[-1]
+                if len(history) >= 2:
+                    previous_map[name] = history[-2]
 
         risk_escalated = []
         risk_decreased = []
@@ -207,6 +298,32 @@ class SnapshotStorage:
             "new_anomalies": new_anomalies_map,
             "resolved_anomalies": resolved_anomalies_map,
         }
+
+    def save_batch_snapshots(self, results: List[Dict], name_prefix: str = "批量巡检") -> List[Dict]:
+        import secrets
+        saved = []
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        for idx, result in enumerate(results):
+            name = f"{name_prefix}_{timestamp}_{idx+1}"
+            snapshot_id = secrets.token_hex(4)
+            snapshot = {
+                "id": snapshot_id,
+                "name": name,
+                "artist_name": result["artist_name"],
+                "analysis_result": result,
+                "created_at": datetime.now().isoformat(),
+                "notes": f"{name_prefix} - 第{idx+1}位",
+            }
+            file_path = self.storage_dir / f"{snapshot_id}.json"
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(snapshot, f, ensure_ascii=False, indent=2, default=str)
+            saved.append({
+                "id": snapshot_id,
+                "name": name,
+                "artist_name": result["artist_name"],
+                "file_path": str(file_path),
+            })
+        return saved
 
     def backup(self, output_path: str) -> str:
         output_path = Path(output_path)
@@ -268,8 +385,9 @@ class SnapshotStorage:
             "overwritten": overwritten,
         }
 
-    def archive_before(self, before_time: datetime, archive_path: str = None) -> Dict:
+    def archive_before(self, before_time: datetime, archive_path: str = None, dry_run: bool = False) -> Dict:
         archived_ids = []
+        archived_details = []
         remaining = 0
 
         if archive_path is None:
@@ -279,14 +397,33 @@ class SnapshotStorage:
             archive_dir = Path(archive_path)
             archive_dir.mkdir(parents=True, exist_ok=True)
 
+        earliest_time = None
+        latest_time = None
+        artist_names = set()
+
         for file_path in self.storage_dir.glob("*.json"):
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 created_at = datetime.fromisoformat(data["created_at"])
                 if created_at < before_time:
-                    dest = archive_dir / file_path.name
-                    shutil.move(str(file_path), str(dest))
+                    artist_name = data["artist_name"]
+                    artist_names.add(artist_name)
+                    archived_details.append({
+                        "id": data["id"],
+                        "name": data["name"],
+                        "artist_name": artist_name,
+                        "created_at": data["created_at"],
+                        "risk_level": data["analysis_result"]["risk_level"],
+                    })
+                    if earliest_time is None or created_at < earliest_time:
+                        earliest_time = created_at
+                    if latest_time is None or created_at > latest_time:
+                        latest_time = created_at
+
+                    if not dry_run:
+                        dest = archive_dir / file_path.name
+                        shutil.move(str(file_path), str(dest))
                     archived_ids.append(data["id"])
                 else:
                     remaining += 1
@@ -296,7 +433,15 @@ class SnapshotStorage:
         return {
             "archived": len(archived_ids),
             "archived_ids": archived_ids,
+            "archived_details": archived_details,
             "remaining": remaining,
+            "dry_run": dry_run,
+            "time_range": {
+                "earliest": earliest_time.isoformat() if earliest_time else None,
+                "latest": latest_time.isoformat() if latest_time else None,
+            },
+            "artist_names": sorted(list(artist_names)),
+            "archive_dir": str(archive_dir),
         }
 
     def export_markdown(
@@ -307,6 +452,8 @@ class SnapshotStorage:
         filter_conditions: Dict = None,
         trend_summary: Dict = None,
         follow_up_suggestions: Dict = None,
+        open_followups: List[Dict] = None,
+        batch_comparison: Dict = None,
     ) -> str:
         lines = []
         lines.append(f"# {title}")
@@ -418,6 +565,78 @@ class SnapshotStorage:
             for artist, suggestion in follow_up_suggestions.items():
                 lines.append(f"- **{artist}**: {suggestion}")
 
+        if batch_comparison and batch_comparison.get("has_previous"):
+            lines.append("")
+            lines.append("## 与上次巡检对比")
+            lines.append("")
+            lines.append(f"> 可对比艺人: {batch_comparison['compared_count']}/{batch_comparison['total_count']}")
+            lines.append("")
+
+            if batch_comparison.get("risk_escalated"):
+                lines.append("### 风险新升高")
+                lines.append("")
+                for item in batch_comparison["risk_escalated"]:
+                    old_label = RISK_LABEL_MAP.get(item["old_level"], item["old_level"])
+                    new_label = RISK_LABEL_MAP.get(item["new_level"], item["new_level"])
+                    diff = item["new_score"] - item["old_score"]
+                    lines.append(
+                        f"- **{item['name']}**: {old_label}({item['old_score']:.1f}) → {new_label}({item['new_score']:.1f}) (+{diff:.1f})"
+                    )
+                lines.append("")
+
+            if batch_comparison.get("risk_decreased"):
+                lines.append("### 风险已回落")
+                lines.append("")
+                for item in batch_comparison["risk_decreased"]:
+                    old_label = RISK_LABEL_MAP.get(item["old_level"], item["old_level"])
+                    new_label = RISK_LABEL_MAP.get(item["new_level"], item["new_level"])
+                    diff = item["old_score"] - item["new_score"]
+                    lines.append(
+                        f"- **{item['name']}**: {old_label}({item['old_score']:.1f}) → {new_label}({item['new_score']:.1f}) (-{diff:.1f})"
+                    )
+                lines.append("")
+
+            if batch_comparison.get("new_anomalies"):
+                lines.append("### 新增异常词")
+                lines.append("")
+                for artist, words in batch_comparison["new_anomalies"].items():
+                    lines.append(f"- **{artist}**: {', '.join(words)}")
+                lines.append("")
+
+            if batch_comparison.get("resolved_anomalies"):
+                lines.append("### 异常词已回落")
+                lines.append("")
+                for artist, words in batch_comparison["resolved_anomalies"].items():
+                    lines.append(f"- **{artist}**: {', '.join(words)}")
+                lines.append("")
+
+            if not batch_comparison.get("risk_escalated") and not batch_comparison.get("new_anomalies"):
+                lines.append("- ✅ 本次巡检与上次相比无风险升高和新增异常词，态势平稳")
+                lines.append("")
+
+        if open_followups:
+            lines.append("")
+            lines.append("## 未闭环跟进事项")
+            lines.append("")
+            lines.append(f"| ID | 艺人 | 标题 | 优先级 | 状态 | 负责人 | 下次复查 | 备注 |")
+            lines.append("|----|------|------|--------|------|--------|----------|------|")
+            priority_map = {"low": "低", "medium": "中", "high": "高", "critical": "紧急"}
+            status_map = {"pending": "待处理", "in_progress": "处理中", "resolved": "已解决", "closed": "已闭环"}
+            for item in open_followups:
+                next_review = item.get("next_review_time")
+                if next_review:
+                    next_review = next_review[:16].replace("T", " ")
+                else:
+                    next_review = "-"
+                notes = item.get("notes", "")[:20] + ("..." if len(item.get("notes", "")) > 20 else "")
+                lines.append(
+                    f"| {item['id']} | {item['artist_name']} | {item['title']} | "
+                    f"{priority_map.get(item['priority'], item['priority'])} | "
+                    f"{status_map.get(item['status'], item['status'])} | "
+                    f"{item.get('assignee', '-') or '-'} | {next_review} | {notes or '-'} |"
+                )
+            lines.append("")
+
         content = "\n".join(lines)
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -433,6 +652,8 @@ class SnapshotStorage:
         filter_conditions: Dict = None,
         trend_summary: Dict = None,
         follow_up_suggestions: Dict = None,
+        open_followups: List[Dict] = None,
+        batch_comparison: Dict = None,
     ) -> str:
         export_data = {
             "generated_at": datetime.now().isoformat(),
@@ -440,6 +661,8 @@ class SnapshotStorage:
             "filter_conditions": filter_conditions or {},
             "trend_summary": trend_summary or {},
             "follow_up_suggestions": follow_up_suggestions or {},
+            "open_followups": open_followups or [],
+            "batch_comparison": batch_comparison or {},
             "snapshots": snapshots,
         }
 
@@ -603,3 +826,131 @@ class SnapshotStorage:
             created_at=datetime.fromisoformat(data["created_at"]),
             notes=data.get("notes", ""),
         )
+
+
+class FollowUpStorage:
+    def __init__(self, storage_dir: str = None):
+        if storage_dir is None:
+            base_dir = Path(__file__).resolve().parent.parent
+            storage_dir = base_dir / "data" / "followups"
+        self.storage_dir = Path(storage_dir)
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self._file = self.storage_dir / "followups.json"
+        if not self._file.exists():
+            self._file.write_text("[]", encoding="utf-8")
+
+    def _load_all(self) -> List[Dict]:
+        try:
+            with open(self._file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return []
+
+    def _save_all(self, items: List[Dict]):
+        with open(self._file, "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False, indent=2, default=str)
+
+    def add(
+        self,
+        artist_name: str,
+        title: str,
+        description: str,
+        priority: str = "medium",
+        assignee: str = "",
+        next_review_time: Optional[datetime] = None,
+        notes: str = "",
+        snapshot_ids: List[str] = None,
+        anomaly_words: List[str] = None,
+    ) -> str:
+        import secrets
+        item_id = secrets.token_hex(4)
+        now = datetime.now()
+        item = {
+            "id": item_id,
+            "artist_name": artist_name,
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "status": FollowUpStatus.PENDING.value,
+            "assignee": assignee,
+            "next_review_time": next_review_time.isoformat() if next_review_time else None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "notes": notes,
+            "snapshot_ids": snapshot_ids or [],
+            "anomaly_words": anomaly_words or [],
+        }
+        items = self._load_all()
+        items.append(item)
+        self._save_all(items)
+        return item_id
+
+    def list(
+        self,
+        status: Optional[str] = None,
+        artist: Optional[str] = None,
+        priority: Optional[str] = None,
+    ) -> List[Dict]:
+        items = self._load_all()
+        if status:
+            items = [i for i in items if i["status"] == status]
+        if artist:
+            items = [i for i in items if i["artist_name"] == artist]
+        if priority:
+            items = [i for i in items if i["priority"] == priority]
+        return sorted(items, key=lambda x: x["created_at"], reverse=True)
+
+    def get(self, item_id: str) -> Optional[Dict]:
+        items = self._load_all()
+        for item in items:
+            if item["id"] == item_id:
+                return item
+        return None
+
+    def update(
+        self,
+        item_id: str,
+        status: Optional[str] = None,
+        assignee: Optional[str] = None,
+        next_review_time: Optional[datetime] = None,
+        notes: Optional[str] = None,
+        priority: Optional[str] = None,
+    ) -> bool:
+        items = self._load_all()
+        for item in items:
+            if item["id"] == item_id:
+                if status:
+                    item["status"] = status
+                if assignee is not None:
+                    item["assignee"] = assignee
+                if next_review_time is not None:
+                    item["next_review_time"] = next_review_time.isoformat() if next_review_time else None
+                if notes is not None:
+                    item["notes"] = notes
+                if priority:
+                    item["priority"] = priority
+                item["updated_at"] = datetime.now().isoformat()
+                self._save_all(items)
+                return True
+        return False
+
+    def close(self, item_id: str, notes: str = "") -> bool:
+        return self.update(
+            item_id,
+            status=FollowUpStatus.CLOSED.value,
+            notes=notes,
+        )
+
+    def delete(self, item_id: str) -> bool:
+        items = self._load_all()
+        new_items = [i for i in items if i["id"] != item_id]
+        if len(new_items) != len(items):
+            self._save_all(new_items)
+            return True
+        return False
+
+    def get_open_items(self) -> List[Dict]:
+        return [
+            i for i in self._load_all()
+            if i["status"] in [FollowUpStatus.PENDING.value, FollowUpStatus.IN_PROGRESS.value, FollowUpStatus.RESOLVED.value]
+        ]
