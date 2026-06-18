@@ -1,0 +1,85 @@
+{
+  "id": "1a8be51d",
+  "name": "巡检1",
+  "artist_name": "肖战",
+  "created_at": "2026-06-19T05:25:10.855501",
+  "notes": "第一轮巡检",
+  "analysis_result": {
+    "artist_name": "肖战",
+    "discussion_volume": 18924,
+    "volume_change": 1.21,
+    "sentiment": "positive",
+    "sentiment_score": 0.3,
+    "top_trending_words": [
+      {
+        "word": "发布会",
+        "count": 4032,
+        "growth_rate": 197.55,
+        "is_anomaly": false
+      },
+      {
+        "word": "太棒了",
+        "count": 2915,
+        "growth_rate": 155.79,
+        "is_anomaly": false
+      },
+      {
+        "word": "温暖",
+        "count": 2783,
+        "growth_rate": 145.76,
+        "is_anomaly": false
+      },
+      {
+        "word": "造型",
+        "count": 2224,
+        "growth_rate": 114.84,
+        "is_anomaly": false
+      },
+      {
+        "word": "穿搭",
+        "count": 1756,
+        "growth_rate": 89.99,
+        "is_anomaly": false
+      },
+      {
+        "word": "粉丝",
+        "count": 3371,
+        "growth_rate": 49.11,
+        "is_anomaly": false
+      },
+      {
+        "word": "抄袭",
+        "count": 3162,
+        "growth_rate": 48.24,
+        "is_anomaly": false
+      },
+      {
+        "word": "差评",
+        "count": 1949,
+        "growth_rate": 37.33,
+        "is_anomaly": false
+      },
+      {
+        "word": "敬业",
+        "count": 1472,
+        "growth_rate": 25.83,
+        "is_anomaly": false
+      },
+      {
+        "word": "爆款",
+        "count": 4545,
+        "growth_rate": 22.91,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [],
+    "anomaly_words": [],
+    "risk_level": "low",
+    "risk_score": 0,
+    "platform": "all",
+    "start_time": "2026-06-18T05:25:10.829687",
+    "end_time": "2026-06-19T05:25:10.829687",
+    "analyzed_at": "2026-06-19T05:25:10.829836",
+    "focus_keywords": []
+  }
+}

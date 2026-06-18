@@ -879,3 +879,399 @@ class OutputFormatter:
 
     def print_warning(self, message: str):
         self.console.print(Text(f"⚠ {message}", style="bright_yellow"))
+
+    def print_artist_history(self, artist_name: str, history: List[Dict]):
+        if not history:
+            self.console.print(Panel(
+                f"[dim]艺人 {artist_name} 暂无快照记录，请先使用 analyze 命令分析并保存快照[/dim]",
+                border_style="dim"
+            ))
+            return
+
+        title = Text(f"📈 趋势视图 - {artist_name}（共 {len(history)} 次快照）")
+        title.stylize("bold bright_cyan")
+        self.console.print(Panel(title, border_style="bright_cyan", box=box.DOUBLE))
+
+        self.console.print()
+        self._print_history_trend_table(artist_name, history)
+
+        self.console.print()
+        self._print_history_trend_chart(history)
+
+        self.console.print()
+        self._print_history_anomaly_changes(history)
+
+        self.console.print()
+        self._print_history_conclusion(artist_name, history)
+
+    def _print_history_trend_table(self, artist_name: str, history: List[Dict]):
+        table = Table(
+            Column("序号", justify="right", width=6),
+            Column("快照名称", style="bold", width=18),
+            Column("创建时间", width=20),
+            Column("讨论量", justify="right", width=12),
+            Column("风险分", justify="right", width=8),
+            Column("风险等级", justify="center", width=10),
+            Column("情绪", justify="center", width=8),
+            Column("争议数", justify="right", width=8),
+            Column("异常词", width=20, overflow="fold"),
+            Column("趋势", width=8),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for idx, s in enumerate(history, 1):
+            risk_level = RiskLevel(s["risk_level"])
+            sentiment = Sentiment(s["sentiment"])
+
+            trend_text = Text()
+            if idx > 1:
+                prev = history[idx - 2]
+                risk_diff = s["risk_score"] - prev["risk_score"]
+                vol_diff = s["discussion_volume"] - prev["discussion_volume"]
+                if risk_diff > 10:
+                    trend_text.append("🔥升温", style="blink bold bright_red")
+                elif risk_diff > 0:
+                    trend_text.append("↑微升", style="bright_red")
+                elif risk_diff < -10:
+                    trend_text.append("↓降温", style="bright_green")
+                elif risk_diff < 0:
+                    trend_text.append("↓微降", style="bright_green")
+                else:
+                    trend_text.append("→持平", style="dim")
+            else:
+                trend_text.append("-", style="dim")
+
+            anomaly_words = s.get("anomaly_words", [])
+            has_emergency = s.get("has_emergency", False)
+            anomaly_parts = []
+            for w in anomaly_words[:3]:
+                if w in self.anomaly_detector.emergency_words:
+                    anomaly_parts.append(f"🚨{w}")
+                else:
+                    anomaly_parts.append(w)
+            anomaly_str = ",".join(anomaly_parts) if anomaly_parts else "-"
+            anomalies_text = Text(anomaly_str)
+            if has_emergency:
+                anomalies_text.stylize("blink bold bright_red on bright_yellow")
+            elif anomaly_parts:
+                anomalies_text.stylize("bright_red")
+            else:
+                anomalies_text.stylize("dim")
+
+            table.add_row(
+                str(idx),
+                s["name"],
+                s["created_at"],
+                f"{s['discussion_volume']:,}",
+                Text(f"{s['risk_score']:.1f}", style=RISK_COLORS[risk_level]),
+                Text(RISK_LABELS[risk_level], style=RISK_COLORS[risk_level]),
+                Text(SENTIMENT_LABELS[sentiment], style=SENTIMENT_COLORS[sentiment]),
+                str(s.get("controversy_count", 0)),
+                anomalies_text,
+                trend_text,
+            )
+
+        self.console.print(
+            Panel(table, title="📊 历史快照序列", title_align="left", border_style="bright_blue")
+        )
+
+    def _print_history_trend_chart(self, history: List[Dict]):
+        volumes = [s["discussion_volume"] for s in history]
+        risks = [s["risk_score"] for s in history]
+        max_vol = max(volumes) if volumes else 1
+        min_vol = min(volumes) if volumes else 0
+        chart_width = 30
+
+        vol_bars = []
+        risk_bars = []
+        for v, r in zip(volumes, risks):
+            if max_vol > min_vol:
+                vol_filled = int((v - min_vol) / (max_vol - min_vol) * chart_width)
+            else:
+                vol_filled = chart_width // 2
+            vol_bars.append("█" * max(1, vol_filled) + "░" * (chart_width - max(1, vol_filled)))
+            risk_filled = int(r / 100 * chart_width)
+            risk_bars.append("█" * max(1, risk_filled) + "░" * (chart_width - max(1, risk_filled)))
+
+        vol_table = Table(
+            Column("时间", width=16),
+            Column("讨论量", justify="right", width=10),
+            Column("趋势", width=chart_width + 2),
+            Column("方向", width=6),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for i, s in enumerate(history):
+            vol_bar = Text(vol_bars[i], style="bright_blue")
+            dir_text = Text()
+            if i > 0:
+                diff = volumes[i] - volumes[i - 1]
+                if diff > 0:
+                    dir_text.append("↑", style="bright_red")
+                elif diff < 0:
+                    dir_text.append("↓", style="bright_green")
+                else:
+                    dir_text.append("→", style="dim")
+            vol_table.add_row(
+                s["created_at"][:16],
+                f"{volumes[i]:,}",
+                vol_bar,
+                dir_text,
+            )
+
+        self.console.print(
+            Panel(vol_table, title="📈 讨论量趋势", title_align="left", border_style="bright_blue")
+        )
+
+        self.console.print()
+
+        risk_table = Table(
+            Column("时间", width=16),
+            Column("风险分", justify="right", width=10),
+            Column("趋势", width=chart_width + 2),
+            Column("方向", width=6),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for i, s in enumerate(history):
+            risk_level = RiskLevel(s["risk_level"])
+            risk_bar = Text(risk_bars[i], style=RISK_COLORS[risk_level])
+            dir_text = Text()
+            if i > 0:
+                diff = risks[i] - risks[i - 1]
+                if diff > 5:
+                    dir_text.append("↑↑", style="blink bold bright_red")
+                elif diff > 0:
+                    dir_text.append("↑", style="bright_red")
+                elif diff < -5:
+                    dir_text.append("↓↓", style="bright_green")
+                elif diff < 0:
+                    dir_text.append("↓", style="bright_green")
+                else:
+                    dir_text.append("→", style="dim")
+            risk_table.add_row(
+                s["created_at"][:16],
+                Text(f"{risks[i]:.1f}", style=RISK_COLORS[risk_level]),
+                risk_bar,
+                dir_text,
+            )
+
+        self.console.print(
+            Panel(risk_table, title="🎯 风险分趋势", title_align="left", border_style="bright_magenta")
+        )
+
+    def _print_history_anomaly_changes(self, history: List[Dict]):
+        if len(history) < 2:
+            self.console.print(Panel("[dim]仅1次快照，暂无异常词变化记录[/dim]", border_style="dim"))
+            return
+
+        table = Table(
+            Column("对比", width=25),
+            Column("新增异常词", width=18),
+            Column("消除异常词", width=18),
+            Column("持续异常词", width=18),
+            box=box.SIMPLE,
+            expand=True,
+        )
+
+        for i in range(1, len(history)):
+            prev_words = set(history[i - 1].get("anomaly_words", []))
+            curr_words = set(history[i].get("anomaly_words", []))
+
+            new_words = curr_words - prev_words
+            resolved = prev_words - curr_words
+            ongoing = curr_words & prev_words
+
+            new_text = Text(",".join(sorted(new_words)) if new_words else "-",
+                           style="blink bold bright_red" if new_words else "dim")
+            resolved_text = Text(",".join(sorted(resolved)) if resolved else "-",
+                                style="bright_green" if resolved else "dim")
+            ongoing_text = Text(",".join(sorted(ongoing)) if ongoing else "-",
+                               style="bright_yellow" if ongoing else "dim")
+
+            label = f"{history[i-1]['name']} → {history[i]['name']}"
+            table.add_row(label, new_text, resolved_text, ongoing_text)
+
+        self.console.print(
+            Panel(table, title="🚨 异常词逐次变化", title_align="left", border_style="bright_red")
+        )
+
+    def _print_history_conclusion(self, artist_name: str, history: List[Dict]):
+        if len(history) < 2:
+            conclusion = f"仅有1次快照，无法判断趋势，建议持续监控并保存更多快照"
+            conclusion_text = Text(conclusion, style="bright_white")
+            self.console.print(
+                Panel(conclusion_text, title="📋 趋势结论", title_align="left", border_style="bright_cyan")
+            )
+            return
+
+        latest = history[-1]
+        earliest = history[0]
+        risk_diff = latest["risk_score"] - earliest["risk_score"]
+        vol_diff = latest["discussion_volume"] - earliest["discussion_volume"]
+
+        lines = []
+        lines.append(f"【{artist_name} 趋势结论】")
+        lines.append("")
+
+        if risk_diff > 20:
+            lines.append(f"⚠️ 风险显著上升: 从 {earliest['risk_score']:.1f} 升至 {latest['risk_score']:.1f}（+{risk_diff:.1f}）")
+        elif risk_diff > 0:
+            lines.append(f"📈 风险微升: 从 {earliest['risk_score']:.1f} 升至 {latest['risk_score']:.1f}（+{risk_diff:.1f}）")
+        elif risk_diff < -20:
+            lines.append(f"✅ 风险显著下降: 从 {earliest['risk_score']:.1f} 降至 {latest['risk_score']:.1f}（{risk_diff:.1f}）")
+        elif risk_diff < 0:
+            lines.append(f"📉 风险微降: 从 {earliest['risk_score']:.1f} 降至 {latest['risk_score']:.1f}（{risk_diff:.1f}）")
+        else:
+            lines.append(f"➡️ 风险持平: 维持在 {latest['risk_score']:.1f}")
+
+        if vol_diff > 0:
+            lines.append(f"📊 讨论量上升: 从 {earliest['discussion_volume']:,} 升至 {latest['discussion_volume']:,}（+{vol_diff:,}）")
+        elif vol_diff < 0:
+            lines.append(f"📊 讨论量下降: 从 {earliest['discussion_volume']:,} 降至 {latest['discussion_volume']:,}（{vol_diff:,}）")
+        else:
+            lines.append(f"📊 讨论量持平: 维持在 {latest['discussion_volume']:,}")
+
+        all_anomalies = set()
+        for s in history:
+            for w in s.get("anomaly_words", []):
+                all_anomalies.add(w)
+        if all_anomalies:
+            lines.append(f"🚨 历史异常词: {', '.join(sorted(all_anomalies))}")
+        else:
+            lines.append(f"🚨 历史异常词: 无")
+
+        latest_anomaly = latest.get("anomaly_words", [])
+        if latest.get("has_emergency"):
+            lines.append(f"💡 建议: 当前存在紧急预警词，需立即启动应急预案")
+        elif risk_diff > 20:
+            lines.append(f"💡 建议: 风险上升趋势明显，加密巡检频率至每2小时一次")
+        elif risk_diff > 0:
+            lines.append(f"💡 建议: 风险有所上升，保持关注，下次巡检时重点复查")
+        elif risk_diff < -20:
+            lines.append(f"💡 建议: 风险明显回落，可恢复正常巡检频率")
+        else:
+            lines.append(f"💡 建议: 态势平稳，按正常频率巡检")
+
+        conclusion_text = Text("\n".join(lines), style="bright_white")
+        self.console.print(
+            Panel(conclusion_text, title="📋 趋势结论", title_align="left", border_style="bright_cyan", box=box.DOUBLE)
+        )
+
+    def print_batch_comparison(self, comparison: Dict):
+        if not comparison.get("has_previous"):
+            self.console.print(Panel(
+                "[dim]未找到历史快照，无法生成对比结论。本次为首次巡检。[/dim]",
+                border_style="dim"
+            ))
+            return
+
+        title = Text(f"📊 与上次巡检对比（{comparison['compared_count']}/{comparison['total_count']} 人可对比）")
+        title.stylize("bold bright_cyan")
+        self.console.print(Panel(title, border_style="bright_cyan", box=box.DOUBLE))
+
+        self.console.print()
+
+        if comparison.get("risk_escalated"):
+            table = Table(
+                Column("艺人", style="bold", width=15),
+                Column("旧风险", justify="center", width=12),
+                Column("新风险", justify="center", width=12),
+                Column("风险分变化", justify="right", width=12),
+                Column("趋势", width=8),
+                box=box.SIMPLE,
+                expand=True,
+            )
+            for item in comparison["risk_escalated"]:
+                old_level = RiskLevel(item["old_level"])
+                new_level = RiskLevel(item["new_level"])
+                diff = item["new_score"] - item["old_score"]
+                table.add_row(
+                    Text(item["name"], style="blink bold bright_red"),
+                    Text(RISK_LABELS[old_level], style=RISK_COLORS[old_level]),
+                    Text(RISK_LABELS[new_level], style=RISK_COLORS[new_level]),
+                    Text(f"+{diff:.1f}", style="blink bold bright_red"),
+                    Text("🔥升温", style="blink bold bright_red"),
+                )
+            self.console.print(
+                Panel(table, title="⚠️ 风险新升高", title_align="left", border_style="bright_red")
+            )
+            self.console.print()
+
+        if comparison.get("risk_decreased"):
+            table = Table(
+                Column("艺人", style="bold", width=15),
+                Column("旧风险", justify="center", width=12),
+                Column("新风险", justify="center", width=12),
+                Column("风险分变化", justify="right", width=12),
+                Column("趋势", width=8),
+                box=box.SIMPLE,
+                expand=True,
+            )
+            for item in comparison["risk_decreased"]:
+                old_level = RiskLevel(item["old_level"])
+                new_level = RiskLevel(item["new_level"])
+                diff = item["new_score"] - item["old_score"]
+                table.add_row(
+                    item["name"],
+                    Text(RISK_LABELS[old_level], style=RISK_COLORS[old_level]),
+                    Text(RISK_LABELS[new_level], style=RISK_COLORS[new_level]),
+                    Text(f"{diff:.1f}", style="bright_green"),
+                    Text("✅降温", style="bright_green"),
+                )
+            self.console.print(
+                Panel(table, title="✅ 风险已回落", title_align="left", border_style="bright_green")
+            )
+            self.console.print()
+
+        if comparison.get("new_anomalies"):
+            table = Table(
+                Column("艺人", style="bold", width=15),
+                Column("新增异常词", style="bold"),
+                box=box.SIMPLE,
+                expand=True,
+            )
+            for artist, words in comparison["new_anomalies"].items():
+                word_str = ",".join(words)
+                is_emergency = any(w in self.anomaly_detector.emergency_words for w in words)
+                if is_emergency:
+                    table.add_row(
+                        Text(artist, style="blink bold bright_red on bright_yellow"),
+                        Text(f"🚨 {word_str}", style="blink bold bright_red on bright_yellow"),
+                    )
+                else:
+                    table.add_row(
+                        Text(artist, style="bold bright_red"),
+                        Text(f"⚠️ {word_str}", style="bold bright_red"),
+                    )
+            self.console.print(
+                Panel(table, title="🚨 新增异常词", title_align="left", border_style="bright_red")
+            )
+            self.console.print()
+
+        if comparison.get("resolved_anomalies"):
+            table = Table(
+                Column("艺人", style="bold", width=15),
+                Column("消除异常词", style="bold"),
+                box=box.SIMPLE,
+                expand=True,
+            )
+            for artist, words in comparison["resolved_anomalies"].items():
+                table.add_row(
+                    Text(artist, style="bright_green"),
+                    Text(",".join(words), style="dim"),
+                )
+            self.console.print(
+                Panel(table, title="✅ 异常词已回落", title_align="left", border_style="bright_green")
+            )
+            self.console.print()
+
+        if not comparison.get("risk_escalated") and not comparison.get("new_anomalies"):
+            self.console.print(Panel(
+                "[bright_green]本次巡检与上次相比无风险升高和新增异常词，态势平稳[/bright_green]",
+                border_style="bright_green"
+            ))
+

@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-06-19T05:26:36.266780",
+  "count": 6,
+  "filter_conditions": {},
+  "trend_summary": {
+    "risk_escalated": [
+      {
+        "name": "肖战",
+        "old_level": "medium",
+        "new_level": "critical",
+        "old_score": 48.6,
+        "new_score": 80.2
+      }
+    ],
+    "risk_decreased": [],
+    "new_anomalies": {
+      "肖战": [
+        "代言解约"
+      ]
+    },
+    "resolved_anomalies": {}
+  },
+  "follow_up_suggestions": {
+    "易烊千玺": "存在异常词，下次巡检时重点关注",
+    "肖战": "存在紧急预警词，需立即启动应急预案并持续监控",
+    "王一博": "存在紧急预警词，需立即启动应急预案并持续监控"
+  },
+  "snapshots": [
+    {
+      "id": "1593dce2",
+      "name": "巡检3",
+      "artist_name": "肖战",
+      "created_at": "2026-06-19T05:25:20.832119",
+      "risk_level": "critical",
+      "risk_score": 80.2,
+      "sentiment": "neutral",
+      "sentiment_score": -0.09,
+      "discussion_volume": 35560,
+      "anomaly_words": [
+        "代言解约"
+      ],
+      "has_emergency": true,
+      "has_spike": true,
+      "notes": "第三轮巡检"
+    },
+    {
+      "id": "10412026",
+      "name": "巡检2",
+      "artist_name": "肖战",
+      "created_at": "2026-06-19T05:25:20.591446",
+      "risk_level": "medium",
+      "risk_score": 48.6,
+      "sentiment": "neutral",
+      "sentiment_score": -0.16,
+      "discussion_volume": 42764,
+      "anomaly_words": [],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "第二轮巡检"
+    },
+    {
+      "id": "1a8be51d",
+      "name": "巡检1",
+      "artist_name": "肖战",
+      "created_at": "2026-06-19T05:25:10.855501",
+      "risk_level": "low",
+      "risk_score": 0,
+      "sentiment": "positive",
+      "sentiment_score": 0.3,
+      "discussion_volume": 18924,
+      "anomaly_words": [],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "第一轮巡检"
+    },
+    {
+      "id": "b4506d82",
+      "name": "直播后2小时",
+      "artist_name": "易烊千玺",
+      "created_at": "2026-06-19T05:14:07.449311",
+      "risk_level": "medium",
+      "risk_score": 25.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.89,
+      "discussion_volume": 19987,
+      "anomaly_words": [
+        "翻车"
+      ],
+      "has_emergency": false,
+      "has_spike": true,
+      "notes": "生日直播监控"
+    },
+    {
+      "id": "34777a63",
+      "name": "日常巡检",
+      "artist_name": "王一博",
+      "created_at": "2026-06-19T05:14:07.220105",
+      "risk_level": "critical",
+      "risk_score": 95.8,
+      "sentiment": "neutral",
+      "sentiment_score": 0.19,
+      "discussion_volume": 8869,
+      "anomaly_words": [
+        "封杀"
+      ],
+      "has_emergency": true,
+      "has_spike": true,
+      "notes": "6月19日凌晨巡检"
+    },
+    {
+      "id": "f3c44f79",
+      "name": "新剧开播首日",
+      "artist_name": "肖战",
+      "created_at": "2026-06-19T05:13:38.241697",
+      "risk_level": "low",
+      "risk_score": 15.0,
+      "sentiment": "positive",
+      "sentiment_score": 0.61,
+      "discussion_volume": 46245,
+      "anomaly_words": [
+        "丑闻"
+      ],
+      "has_emergency": false,
+      "has_spike": false,
+      "notes": "2026夏季档新剧开播"
+    }
+  ]
+}

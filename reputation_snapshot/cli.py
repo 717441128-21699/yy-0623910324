@@ -6,7 +6,7 @@ from .analyzer import ReputationAnalyzer
 from .batch_scanner import BatchScanner
 from .storage import SnapshotStorage
 from .formatter import OutputFormatter
-from .models import Artist
+from .models import Artist, RiskLevel
 
 
 class Context:
@@ -147,6 +147,11 @@ def analyze(
     is_flag=True,
     help="夜间值班报告模式，输出总览结论和优先级建议",
 )
+@click.option(
+    "--compare-last",
+    is_flag=True,
+    help="与上次巡检对比，显示风险升降和异常词变化",
+)
 @pass_ctx
 def batch(
     ctx: Context,
@@ -157,6 +162,7 @@ def batch(
     keyword: List[str],
     min_risk: str,
     night_report: bool,
+    compare_last: bool,
 ):
     """批量扫描多位艺人并按风险等级排序"""
     try:
@@ -186,6 +192,11 @@ def batch(
 
         summary = ctx.batch_scanner.get_risk_summary(results)
         ctx.formatter.print_batch_results(results, summary, night_report=night_report)
+
+        if compare_last:
+            artist_names = [a.name for a in artists]
+            comparison = ctx.storage.get_batch_comparison(artist_names)
+            ctx.formatter.print_batch_comparison(comparison)
 
     except FileNotFoundError as e:
         ctx.formatter.print_error(str(e))
@@ -262,16 +273,89 @@ def list_snapshots(
         )
         ctx.formatter.print_snapshot_list(snapshots)
 
+        filter_conditions = {}
+        if artist:
+            filter_conditions["artist"] = artist
+        if risk:
+            filter_conditions["risk_level"] = risk
+        if start_time:
+            filter_conditions["start_time"] = start_time
+        if end_time:
+            filter_conditions["end_time"] = end_time
+
+        trend_summary = None
+        follow_up_suggestions = None
+
+        if export_md or export_json:
+            artist_names = list(set(s["artist_name"] for s in snapshots))
+            if artist_names:
+                comparison = ctx.storage.get_batch_comparison(artist_names)
+                trend_summary = {
+                    "risk_escalated": comparison.get("risk_escalated", []),
+                    "risk_decreased": comparison.get("risk_decreased", []),
+                    "new_anomalies": comparison.get("new_anomalies", {}),
+                    "resolved_anomalies": comparison.get("resolved_anomalies", {}),
+                }
+
+                follow_up_suggestions = {}
+                for name in artist_names:
+                    history = ctx.storage.get_artist_history(name, limit=1)
+                    if history:
+                        latest = history[0]
+                        risk_level = RiskLevel(latest["risk_level"])
+                        if latest.get("has_emergency"):
+                            follow_up_suggestions[name] = "存在紧急预警词，需立即启动应急预案并持续监控"
+                        elif risk_level == RiskLevel.CRITICAL:
+                            follow_up_suggestions[name] = "极高风险，安排专人持续监控"
+                        elif risk_level == RiskLevel.HIGH:
+                            follow_up_suggestions[name] = "高风险，每2小时复查一次"
+                        elif latest.get("anomaly_words"):
+                            follow_up_suggestions[name] = "存在异常词，下次巡检时重点关注"
+                        else:
+                            follow_up_suggestions[name] = "态势平稳，正常频率巡检"
+
         if export_md:
-            path = ctx.storage.export_markdown(snapshots, export_md, title)
+            path = ctx.storage.export_markdown(
+                snapshots, export_md, title,
+                filter_conditions=filter_conditions,
+                trend_summary=trend_summary,
+                follow_up_suggestions=follow_up_suggestions,
+            )
             ctx.formatter.print_success(f"Markdown报告已导出: {path}")
 
         if export_json:
-            path = ctx.storage.export_json(snapshots, export_json)
+            path = ctx.storage.export_json(
+                snapshots, export_json,
+                filter_conditions=filter_conditions,
+                trend_summary=trend_summary,
+                follow_up_suggestions=follow_up_suggestions,
+            )
             ctx.formatter.print_success(f"JSON报告已导出: {path}")
 
     except Exception as e:
         ctx.formatter.print_error(f"获取快照列表失败: {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.argument("artist_name")
+@click.option(
+    "-n", "--limit",
+    type=int,
+    default=10,
+    help="显示最近N次快照，默认10",
+)
+@pass_ctx
+def history(ctx: Context, artist_name: str, limit: int):
+    """查看艺人的快照趋势视图
+
+    ARTIST_NAME: 艺人名称
+    """
+    try:
+        snapshots = ctx.storage.get_artist_history(artist_name, limit=limit)
+        ctx.formatter.print_artist_history(artist_name, snapshots)
+    except Exception as e:
+        ctx.formatter.print_error(f"获取趋势数据失败: {str(e)}")
         raise click.Abort()
 
 
@@ -382,6 +466,115 @@ def compare(ctx: Context, snapshot_id1: str, snapshot_id2: str):
         ctx.formatter.print_compare_result(result)
     except Exception as e:
         ctx.formatter.print_error(f"对比快照失败: {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.option(
+    "-o", "--output",
+    type=str,
+    default="./backups",
+    help="备份输出路径（目录或zip文件路径）",
+)
+@pass_ctx
+def backup(ctx: Context, output: str):
+    """备份所有快照数据到zip文件"""
+    try:
+        path = ctx.storage.backup(output)
+        ctx.formatter.print_success(f"快照已备份至: {path}")
+    except Exception as e:
+        ctx.formatter.print_error(f"备份失败: {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.argument("backup_path")
+@click.option(
+    "--merge",
+    is_flag=True,
+    help="合并模式：跳过已存在的快照，不覆盖",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="跳过确认直接恢复",
+)
+@pass_ctx
+def restore(ctx: Context, backup_path: str, merge: bool, yes: bool):
+    """从备份zip文件恢复快照数据
+
+    BACKUP_PATH: 备份文件路径
+    """
+    try:
+        if not yes:
+            action = "合并" if merge else "覆盖恢复"
+            click.confirm(
+                f"确定要从 {backup_path} {action}快照数据吗？",
+                abort=True,
+            )
+
+        result = ctx.storage.restore(backup_path, merge=merge)
+        parts = []
+        if result["restored"]:
+            parts.append(f"新增 {result['restored']} 个快照")
+        if result["skipped"]:
+            parts.append(f"跳过 {result['skipped']} 个已存在快照")
+        if result["overwritten"]:
+            parts.append(f"覆盖 {result['overwritten']} 个快照")
+        ctx.formatter.print_success("恢复完成: " + "，".join(parts))
+    except click.Abort:
+        raise
+    except FileNotFoundError as e:
+        ctx.formatter.print_error(str(e))
+        raise click.Abort()
+    except Exception as e:
+        ctx.formatter.print_error(f"恢复失败: {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.option(
+    "--before",
+    type=str,
+    required=True,
+    help="归档此时间之前的快照，格式：YYYY-MM-DD",
+)
+@click.option(
+    "--archive-dir",
+    type=str,
+    default=None,
+    help="归档目录，默认为 snapshots/archive",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="跳过确认直接归档",
+)
+@pass_ctx
+def archive(ctx: Context, before: str, archive_dir: str, yes: bool):
+    """归档指定时间之前的快照（移动到归档目录，不删除）"""
+    try:
+        before_dt = _parse_datetime(before)
+
+        if not yes:
+            click.confirm(
+                f"确定要归档 {before} 之前的快照吗？数据将移动到归档目录而非删除。",
+                abort=True,
+            )
+
+        result = ctx.storage.archive_before(before_dt, archive_dir)
+        ctx.formatter.print_success(
+            f"归档完成: 归档 {result['archived']} 个快照，剩余 {result['remaining']} 个"
+        )
+        if result["archived_ids"]:
+            ctx.formatter.print_warning(
+                f"已归档快照ID: {', '.join(result['archived_ids'][:10])}"
+                + ("..." if len(result["archived_ids"]) > 10 else "")
+            )
+    except click.Abort:
+        raise
+    except Exception as e:
+        ctx.formatter.print_error(f"归档失败: {str(e)}")
         raise click.Abort()
 
 

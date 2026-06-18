@@ -1,0 +1,93 @@
+{
+  "id": "10412026",
+  "name": "巡检2",
+  "artist_name": "肖战",
+  "created_at": "2026-06-19T05:25:20.591446",
+  "notes": "第二轮巡检",
+  "analysis_result": {
+    "artist_name": "肖战",
+    "discussion_volume": 42764,
+    "volume_change": 109.19,
+    "sentiment": "neutral",
+    "sentiment_score": -0.16,
+    "top_trending_words": [
+      {
+        "word": "骗子",
+        "count": 2868,
+        "growth_rate": 194.05,
+        "is_anomaly": false
+      },
+      {
+        "word": "出圈",
+        "count": 1709,
+        "growth_rate": 192.74,
+        "is_anomaly": false
+      },
+      {
+        "word": "身材",
+        "count": 3946,
+        "growth_rate": 187.61,
+        "is_anomaly": false
+      },
+      {
+        "word": "专辑",
+        "count": 1841,
+        "growth_rate": 146.6,
+        "is_anomaly": false
+      },
+      {
+        "word": "加油",
+        "count": 630,
+        "growth_rate": 69.92,
+        "is_anomaly": false
+      },
+      {
+        "word": "粉丝",
+        "count": 492,
+        "growth_rate": 65.97,
+        "is_anomaly": false
+      },
+      {
+        "word": "绯闻",
+        "count": 4485,
+        "growth_rate": 62.41,
+        "is_anomaly": false
+      },
+      {
+        "word": "投票",
+        "count": 1929,
+        "growth_rate": 7.36,
+        "is_anomaly": false
+      },
+      {
+        "word": "优秀",
+        "count": 2588,
+        "growth_rate": -11.88,
+        "is_anomaly": false
+      },
+      {
+        "word": "敬业",
+        "count": 3827,
+        "growth_rate": -15.53,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [
+      {
+        "keyword": "肖战疑似凉凉",
+        "mentions": 1552,
+        "sentiment": "negative",
+        "description": "近期有爆料称肖战相关，引发网友广泛讨论",
+        "spread_potential": 0.93
+      }
+    ],
+    "anomaly_words": [],
+    "risk_level": "medium",
+    "risk_score": 48.6,
+    "platform": "all",
+    "start_time": "2026-06-18T05:25:20.565322",
+    "end_time": "2026-06-19T05:25:20.565322",
+    "analyzed_at": "2026-06-19T05:25:20.565494",
+    "focus_keywords": []
+  }
+}

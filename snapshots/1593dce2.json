@@ -1,0 +1,109 @@
+{
+  "id": "1593dce2",
+  "name": "巡检3",
+  "artist_name": "肖战",
+  "created_at": "2026-06-19T05:25:20.832119",
+  "notes": "第三轮巡检",
+  "analysis_result": {
+    "artist_name": "肖战",
+    "discussion_volume": 35560,
+    "volume_change": 59.03,
+    "sentiment": "neutral",
+    "sentiment_score": -0.09,
+    "top_trending_words": [
+      {
+        "word": "粉丝",
+        "count": 4195,
+        "growth_rate": 192.83,
+        "is_anomaly": false
+      },
+      {
+        "word": "支持",
+        "count": 444,
+        "growth_rate": 167.74,
+        "is_anomaly": false
+      },
+      {
+        "word": "代言解约",
+        "count": 4322,
+        "growth_rate": 142.5,
+        "is_anomaly": true
+      },
+      {
+        "word": "治愈",
+        "count": 4483,
+        "growth_rate": 133.7,
+        "is_anomaly": false
+      },
+      {
+        "word": "精彩",
+        "count": 1584,
+        "growth_rate": 95.21,
+        "is_anomaly": false
+      },
+      {
+        "word": "演唱会",
+        "count": 937,
+        "growth_rate": 56.96,
+        "is_anomaly": false
+      },
+      {
+        "word": "颜值",
+        "count": 686,
+        "growth_rate": 23.96,
+        "is_anomaly": false
+      },
+      {
+        "word": "穿搭",
+        "count": 4294,
+        "growth_rate": -4.92,
+        "is_anomaly": false
+      },
+      {
+        "word": "骗子",
+        "count": 1345,
+        "growth_rate": -9.19,
+        "is_anomaly": false
+      },
+      {
+        "word": "爱",
+        "count": 4316,
+        "growth_rate": -11.79,
+        "is_anomaly": false
+      }
+    ],
+    "controversy_points": [
+      {
+        "keyword": "肖战回应吐槽",
+        "mentions": 2822,
+        "sentiment": "negative",
+        "description": "针对肖战事件，吐槽方做出回应，但网友态度分化",
+        "spread_potential": 0.55
+      },
+      {
+        "keyword": "肖战疑似差评",
+        "mentions": 1754,
+        "sentiment": "negative",
+        "description": "近期有爆料称肖战相关，引发网友广泛讨论",
+        "spread_potential": 0.71
+      },
+      {
+        "keyword": "肖战被曝封杀",
+        "mentions": 813,
+        "sentiment": "negative",
+        "description": "多个账号发布关于肖战的封杀消息，传播速度较快",
+        "spread_potential": 0.35
+      }
+    ],
+    "anomaly_words": [
+      "代言解约"
+    ],
+    "risk_level": "critical",
+    "risk_score": 80.2,
+    "platform": "all",
+    "start_time": "2026-06-18T05:25:20.798747",
+    "end_time": "2026-06-19T05:25:20.798747",
+    "analyzed_at": "2026-06-19T05:25:20.798956",
+    "focus_keywords": []
+  }
+}
